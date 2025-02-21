@@ -1,0 +1,58 @@
+@import 'tailwindcss/base';
+@import 'tailwindcss/components';
+@import 'tailwindcss/utilities';
+
+:root {
+  --primary: #f0a5c0;
+  --secondary: #e88dac;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  @apply bg-dark-400 text-gray-200;
+}
+
+#root {
+  height: 100vh;
+}
+
+.drag {
+  -webkit-app-region: drag;
+}
+
+.no-drag {
+  -webkit-app-region: no-drag;
+}
+
+/* Scrollbar Styling */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: #1f2024;
+  border-radius: 5px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #2c2e33;
+  border-radius: 5px;
+  border: 2px solid #1f2024;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #3f4147;
+}
+
+/* Hide scrollbar for Chrome, Safari and Opera */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* Hide scrollbar for IE, Edge and Firefox */
+.no-scrollbar {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+} 
