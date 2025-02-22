@@ -7,9 +7,14 @@
   --secondary: #e88dac;
 }
 
+html {
+  scroll-behavior: smooth;
+}
+
 body {
   margin: 0;
   padding: 0;
+  scroll-behavior: smooth;
   @apply bg-light-200 text-gray-800 dark:bg-dark-400 dark:text-gray-200 transition-colors duration-200;
 }
 
@@ -55,4 +60,9 @@ body {
 .no-scrollbar {
   -ms-overflow-style: none;  /* IE and Edge */
   scrollbar-width: none;  /* Firefox */
+}
+
+/* Add smooth scrolling globally */
+* {
+  scroll-behavior: smooth;
 } 

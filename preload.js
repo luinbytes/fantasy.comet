@@ -44,7 +44,7 @@ const systemInfo = {
         uptime: os.uptime(),
         hostname: os.hostname(),
         username: os.userInfo().username,
-        version: '1.1.3',
+        version: '1.2.0',
         osVersion: os.release()
       }
     } catch (error) {
@@ -131,7 +131,7 @@ const systemInfo = {
       }
 
       const latestVersion = release.tag_name.replace('v', '')
-      const currentVersion = '1.1.3'
+      const currentVersion = '1.2.0'
 
       const current = currentVersion.split('.').map(Number)
       const latest = latestVersion.split('.').map(Number)
@@ -201,7 +201,12 @@ const systemInfo = {
       const apiKey = systemInfo.getApiKey()
       if (!apiKey) throw new Error('API key not found')
 
-      const url = `https://constelia.ai/api.php?key=${apiKey}&cmd=getForumPosts&count=${count}`
+      // Ensure count is between 0 and 20
+      const validCount = Math.min(Math.max(0, count), 20)
+
+      const url = `https://constelia.ai/api.php?key=${apiKey}&cmd=getForumPosts&count=${validCount}`
+      console.log('[API] Fetching forum posts:', url)
+      
       const response = await fetch(url)
       
       if (!response.ok) {
@@ -209,17 +214,50 @@ const systemInfo = {
       }
 
       const posts = await response.json()
+      console.log('[API] Raw forum posts:', posts)
       
-      // Sort posts chronologically by post_date (oldest to newest)
-      const sortedPosts = posts.sort((a, b) => parseInt(b.post_date) - parseInt(a.post_date))
+      // Sort posts chronologically by date (newest to oldest)
+      const sortedPosts = posts.sort((a, b) => {
+        // Remove any quotes and parse as integers
+        const dateA = parseInt(String(b.post_date).replace(/"/g, ''))
+        const dateB = parseInt(String(a.post_date).replace(/"/g, ''))
+        return dateA - dateB
+      })
       
-      // Transform the data
-      return sortedPosts.map(post => ({
-        ...post,
-        post_date: parseInt(post.post_date),
-        timestamp: parseInt(post.post_date) * 1000,
-        message: post.message.substring(0, 100) + (post.message.length > 100 ? '...' : '')
-      }))
+      console.log('[API] Sorted posts:', sortedPosts)
+      
+      // Transform the data with correct field names from API
+      const transformedPosts = sortedPosts.map(post => {
+        // Remove any quotes and parse as integer
+        const timestamp = parseInt(String(post.post_date).replace(/"/g, ''))
+        const milliseconds = timestamp * 1000
+        const dateObj = new Date(milliseconds)
+        
+        console.log('[API] Processing post:', {
+          id: post.id,
+          original_date: post.post_date,
+          cleaned_date: String(post.post_date).replace(/"/g, ''),
+          parsed_timestamp: timestamp,
+          milliseconds,
+          date_object: dateObj,
+          formatted: dateObj.toLocaleString()
+        })
+        
+        return {
+          id: post.id,
+          thread_id: post.thread_id,
+          thread_title: post.title,
+          username: post.username,
+          post_date: timestamp,
+          message: post.message,
+          elapsed: post.elapsed,
+          thread_url: `https://constelia.ai/forums/index.php?threads/${post.thread_id}`,
+          formatted_date: dateObj.toLocaleString()
+        }
+      })
+
+      console.log('[API] Transformed posts:', transformedPosts)
+      return transformedPosts
     } catch (error) {
       console.error('[ERROR] Failed to fetch forum posts:', error)
       throw error

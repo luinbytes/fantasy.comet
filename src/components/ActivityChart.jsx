@@ -25,8 +25,9 @@ const ActivityChart = forwardRef((props, ref) => {
         
         // Update stats
         const uniqueUsers = new Set(posts.map(post => post.username)).size
-        const oldestPost = new Date(Math.min(...posts.map(post => parseInt(post.post_date) * 1000)))
-        const newestPost = new Date(Math.max(...posts.map(post => parseInt(post.post_date) * 1000)))
+        const timestamps = posts.map(post => parseInt(post.post_date) * 1000)
+        const oldestPost = new Date(Math.min(...timestamps))
+        const newestPost = new Date(Math.max(...timestamps))
         setStats({
           totalPosts: posts.length,
           uniqueUsers,
@@ -57,14 +58,16 @@ const ActivityChart = forwardRef((props, ref) => {
         
         // Update stats
         const uniqueUsers = new Set(posts.map(post => post.username)).size
-        const oldestPost = new Date(Math.min(...posts.map(post => parseInt(post.post_date) * 1000)))
-        const newestPost = new Date(Math.max(...posts.map(post => parseInt(post.post_date) * 1000)))
+        const timestamps = posts.map(post => parseInt(post.post_date) * 1000)
+        const oldestPost = new Date(Math.min(...timestamps))
+        const newestPost = new Date(Math.max(...timestamps))
         setStats({
           totalPosts: posts.length,
           uniqueUsers,
           timeSpan: `${oldestPost.toLocaleString()} - ${newestPost.toLocaleString()}`
         })
       } catch (err) {
+        console.error('[ERROR] Failed to load activity data:', err)
         setError('Failed to load activity data')
       } finally {
         setLoading(false)
@@ -77,9 +80,31 @@ const ActivityChart = forwardRef((props, ref) => {
   const groupPostsByHour = (posts) => {
     if (!posts.length) return []
 
+    console.log('[DEBUG] Raw posts:', posts)
+
     // Find the time range from the posts
-    const oldestPost = Math.min(...posts.map(post => post.timestamp))
-    const newestPost = Math.max(...posts.map(post => post.timestamp))
+    const timestamps = posts.map(post => {
+      console.log('[DEBUG] Processing post:', {
+        id: post.id,
+        post_date: post.post_date,
+        parsed_date: parseInt(post.post_date),
+        milliseconds: parseInt(post.post_date) * 1000,
+        date_object: new Date(parseInt(post.post_date) * 1000)
+      })
+      return parseInt(post.post_date) * 1000
+    })
+
+    console.log('[DEBUG] Processed timestamps:', timestamps)
+
+    const oldestPost = Math.min(...timestamps)
+    const newestPost = Math.max(...timestamps)
+    
+    console.log('[DEBUG] Time range:', {
+      oldestPost,
+      newestPost,
+      oldestDate: new Date(oldestPost),
+      newestDate: new Date(newestPost)
+    })
     
     // Round to nearest hour
     const startTime = new Date(oldestPost)
@@ -91,6 +116,12 @@ const ActivityChart = forwardRef((props, ref) => {
     // Calculate number of hours between start and end
     const hoursDiff = Math.ceil((endTime - startTime) / (60 * 60 * 1000))
     
+    console.log('[DEBUG] Hour calculations:', {
+      startTime,
+      endTime,
+      hoursDiff
+    })
+
     // Create array for each hour in the range
     const hours = Array.from({ length: hoursDiff + 1 }, (_, i) => {
       const hour = new Date(startTime.getTime() + (i * 60 * 60 * 1000))
@@ -104,17 +135,27 @@ const ActivityChart = forwardRef((props, ref) => {
 
     // Group posts into hours
     posts.forEach(post => {
-      const postDate = new Date(post.timestamp)
+      const postDate = new Date(parseInt(post.post_date) * 1000)
       const hourIndex = Math.floor((postDate - startTime) / (60 * 60 * 1000))
+      
+      console.log('[DEBUG] Post grouping:', {
+        post_id: post.id,
+        post_date: post.post_date,
+        postDate,
+        hourIndex,
+        valid_index: hourIndex >= 0 && hourIndex < hours.length
+      })
       
       if (hourIndex >= 0 && hourIndex < hours.length) {
         hours[hourIndex].count++
         hours[hourIndex].posts.push({
           ...post,
-          formattedDate: new Date(post.timestamp).toLocaleString()
+          formattedDate: post.formatted_date || postDate.toLocaleString()
         })
       }
     })
+
+    console.log('[DEBUG] Final hours array:', hours)
 
     return hours
   }

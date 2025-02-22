@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { motion } from 'framer-motion'
-import { ChartBarIcon, UserGroupIcon, CogIcon, BellIcon, EnvelopeIcon, ArrowPathIcon } from '@heroicons/react/24/outline'
+import { ChartBarIcon, UserGroupIcon, CogIcon, BellIcon, EnvelopeIcon, ArrowPathIcon, ChatBubbleLeftIcon } from '@heroicons/react/24/outline'
 import { XMarkIcon, MinusIcon, ArrowsPointingOutIcon } from '@heroicons/react/20/solid'
 import Settings from './components/Settings'
 import Software from './components/Software'
@@ -10,10 +10,15 @@ import MemberInfo from './components/MemberInfo'
 import { ToastProvider, useToast } from './context/ToastContext'
 import NotificationDrawer from './components/NotificationDrawer'
 import Skeleton from './components/Skeleton'
+import ForumPosts from './components/ForumPosts'
+import { ForumContext } from './contexts/ForumContext'
 
 // Separate the main app content from the providers
 function AppContent() {
   const { addToast } = useToast()
+  const contentRef = useRef(null)
+  const scrollAnimationRef = useRef(null)
+  const lastScrollTime = useRef(Date.now())
   const [selectedTab, setSelectedTab] = useState('dashboard')
   const [systemInfo, setSystemInfo] = useState(null)
   const [memberInfo, setMemberInfo] = useState(null)
@@ -36,6 +41,94 @@ function AppContent() {
   const [selectedSoftwareDetails, setSelectedSoftwareDetails] = useState(null)
   const [softwareDetailsLoading, setSoftwareDetailsLoading] = useState(false)
   const systemInfoInterval = useRef(null)
+
+  // Add smooth scroll to element function
+  const smoothScrollToElement = useCallback((element) => {
+    if (!contentRef.current || !element) return
+
+    const elementRect = element.getBoundingClientRect()
+    const containerRect = contentRef.current.getBoundingClientRect()
+    const relativeTop = elementRect.top - containerRect.top + contentRef.current.scrollTop
+    const targetScroll = relativeTop - 100 // 100px padding from top
+
+    smoothScroll(contentRef.current, targetScroll, 500)
+  }, [])
+
+  // Expose scroll function through ref
+  const scrollRef = useRef({ smoothScrollToElement })
+
+  // Add smooth scroll function
+  const smoothScroll = useCallback((element, target, duration = 300) => {
+    // Cancel any existing animation
+    if (scrollAnimationRef.current) {
+      cancelAnimationFrame(scrollAnimationRef.current)
+    }
+
+    const start = element.scrollTop
+    const distance = target - start
+    const startTime = performance.now()
+
+    const easeOutQuart = t => 1 - (--t) * t * t * t
+
+    const animation = (currentTime) => {
+      const elapsed = currentTime - startTime
+      const progress = Math.min(elapsed / duration, 1)
+
+      element.scrollTop = start + distance * easeOutQuart(progress)
+
+      if (progress < 1) {
+        scrollAnimationRef.current = requestAnimationFrame(animation)
+      } else {
+        scrollAnimationRef.current = null
+      }
+    }
+
+    scrollAnimationRef.current = requestAnimationFrame(animation)
+  }, [])
+
+  // Add scroll event listener
+  useEffect(() => {
+    const content = contentRef.current
+    if (!content) return
+
+    let accumulatedDelta = 0
+    let ticking = false
+
+    const handleWheel = (e) => {
+      e.preventDefault()
+      
+      // Accumulate delta
+      accumulatedDelta += e.deltaY
+
+      // Throttle scroll updates
+      if (!ticking) {
+        requestAnimationFrame(() => {
+          const now = Date.now()
+          const timeSinceLastScroll = now - lastScrollTime.current
+          
+          // Adjust scroll speed based on frequency of scroll events
+          const scrollMultiplier = timeSinceLastScroll < 50 ? 1.5 : 1
+          const targetScroll = content.scrollTop + (accumulatedDelta * scrollMultiplier)
+          
+          smoothScroll(content, targetScroll)
+          
+          // Reset accumulated delta
+          accumulatedDelta = 0
+          ticking = false
+          lastScrollTime.current = now
+        })
+        ticking = true
+      }
+    }
+
+    content.addEventListener('wheel', handleWheel, { passive: false })
+    return () => {
+      content.removeEventListener('wheel', handleWheel)
+      if (scrollAnimationRef.current) {
+        cancelAnimationFrame(scrollAnimationRef.current)
+      }
+    }
+  }, [smoothScroll])
 
   // Modify the system info effect to only run on dashboard
   useEffect(() => {
@@ -199,7 +292,8 @@ function AppContent() {
   const tabTitles = {
     dashboard: 'Dashboard',
     Software: 'Software',
-    settings: 'System Settings'
+    settings: 'System Settings',
+    Forum: 'Forum Posts'
   }
 
   const handleWindowControl = (action) => {
@@ -291,6 +385,10 @@ function AppContent() {
             onCloseDetails={() => setSelectedSoftwareDetails(null)}
           />
         )
+      case 'Forum':
+        return (
+          <ForumPosts />
+        )
       default:
         return (
           <div className="h-full flex flex-col gap-6">
@@ -334,7 +432,7 @@ function AppContent() {
               className="flex-1 min-h-[400px] bg-light-100 dark:bg-dark-200 p-3 pb-6 rounded-xl shadow-md hover:shadow-lg transition-all duration-200 border border-light-300 dark:border-dark-100"
             >
               <h3 className="text-lg font-semibold mb-2 text-gray-800 dark:text-gray-200">Activity Chart</h3>
-              <div className="h-[calc(100%-2.5rem)]">
+              <div className="h-full min-h-[350px]">
                 <ActivityChart ref={activityChartRef} />
               </div>
             </motion.div>
@@ -548,7 +646,8 @@ function AppContent() {
             {[
               { name: 'Dashboard', icon: ChartBarIcon, id: 'dashboard' },
               { name: 'Software', icon: UserGroupIcon, id: 'Software' },
-              { name: 'Settings', icon: CogIcon, id: 'settings' },
+              { name: 'Forum', icon: ChatBubbleLeftIcon, id: 'Forum' },
+              { name: 'Settings', icon: CogIcon, id: 'settings' }
             ].map((item) => (
               <motion.button
                 key={item.id}
@@ -637,7 +736,7 @@ function AppContent() {
           </div>
 
           {/* Content area */}
-          <div className="flex-1 p-6 pb-12 overflow-y-auto">
+          <div ref={contentRef} className="flex-1 p-6 pb-12 overflow-y-auto">
             {isLoading ? (
               <div className="w-full p-4 space-y-4">
                 <div className="flex space-x-4">
@@ -651,7 +750,9 @@ function AppContent() {
                 </div>
               </div>
             ) : (
-              renderContent()
+              <ForumContext.Provider value={{ scrollRef }}>
+                {renderContent()}
+              </ForumContext.Provider>
             )}
           </div>
         </div>
