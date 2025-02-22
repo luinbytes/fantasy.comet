@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { GiftIcon } from '@heroicons/react/24/outline'
 import { useToast } from '../context/ToastContext'
+import Skeleton from './Skeleton'
 
 function MemberInfo({ 
   memberInfo, 
@@ -12,7 +13,20 @@ function MemberInfo({
   onRoll 
 }) {
   if (!memberInfo) {
-    return <div className="text-gray-500 dark:text-gray-400">Loading member info...</div>
+    return (
+      <div className="bg-light-100 dark:bg-dark-200 p-4 rounded-xl shadow-md">
+        <div className="flex items-center space-x-4">
+          <Skeleton className="w-12 h-12 rounded-lg" />
+          <div className="flex-1">
+            <Skeleton className="h-5 w-32 mb-2" />
+            <div className="flex space-x-4">
+              <Skeleton className="h-4 w-16" />
+              <Skeleton className="h-4 w-16" />
+            </div>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (

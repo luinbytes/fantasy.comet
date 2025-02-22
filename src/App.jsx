@@ -9,6 +9,7 @@ import ActivityChart from './components/ActivityChart'
 import MemberInfo from './components/MemberInfo'
 import { ToastProvider, useToast } from './context/ToastContext'
 import NotificationDrawer from './components/NotificationDrawer'
+import Skeleton from './components/Skeleton'
 
 // Separate the main app content from the providers
 function AppContent() {
@@ -30,6 +31,7 @@ function AppContent() {
   const [previousTab, setPreviousTab] = useState('dashboard')
   const activityChartRef = React.useRef(null)
   const [timeUntilRoll, setTimeUntilRoll] = useState(0)
+  const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
     const loadSystemInfo = () => {
@@ -523,8 +525,21 @@ function AppContent() {
     return () => clearInterval(timer)
   }, [cooldownEndTime])
 
+  // Simulate minimum load time for smooth transition
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setIsLoading(false)
+    }, 1000)
+    return () => clearTimeout(timer)
+  }, [])
+
   return (
-    <div className="min-h-screen flex flex-col bg-light-200 dark:bg-dark-400 transition-colors duration-200">
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.3 }}
+      className="h-full bg-light-200 dark:bg-dark-400"
+    >
       {/* Fixed Title Bar */}
       <div className="fixed top-0 left-0 right-0 h-8 bg-light-300 dark:bg-dark-300 flex items-center justify-between px-4 select-none drag z-50">
         <div className="text-gray-600 dark:text-gray-400 text-sm">Fantasy.Comet</div>
@@ -660,7 +675,21 @@ function AppContent() {
 
           {/* Content area */}
           <div className="flex-1 p-6 pb-12 overflow-y-auto">
-            {renderContent()}
+            {isLoading ? (
+              <div className="w-full p-4 space-y-4">
+                <div className="flex space-x-4">
+                  <Skeleton className="w-64 h-32" />
+                  <Skeleton className="flex-1 h-32" />
+                </div>
+                <Skeleton className="w-full h-64" />
+                <div className="grid grid-cols-2 gap-4">
+                  <Skeleton className="h-48" />
+                  <Skeleton className="h-48" />
+                </div>
+              </div>
+            ) : (
+              renderContent()
+            )}
           </div>
         </div>
       </div>
@@ -671,7 +700,7 @@ function AppContent() {
         onClose={() => setIsNotificationDrawerOpen(false)}
         alerts={alerts}
       />
-    </div>
+    </motion.div>
   )
 }
 

@@ -72,7 +72,8 @@ const systemInfo = {
         uptime: os.uptime(),
         hostname: os.hostname(),
         username: os.userInfo().username,
-        version: os.release() // Add Windows version number
+        version: require('../package.json').version,
+        osVersion: os.release()
       }
       console.log('[OK] System info retrieved:', info)
       return info
@@ -269,7 +270,7 @@ const systemInfo = {
       }
 
       const latestVersion = release.tag_name.replace('v', '')
-      const currentVersion = process.env.npm_package_version || '1.0.0'
+      const currentVersion = require('../package.json').version
 
       console.log('[UPDATE] Current version:', currentVersion)
       console.log('[UPDATE] Latest version:', latestVersion)

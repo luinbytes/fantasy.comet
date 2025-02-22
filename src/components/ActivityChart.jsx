@@ -2,6 +2,7 @@ import React, { useState, useEffect, forwardRef, useImperativeHandle } from 'rea
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import ApiKeySetup from './ApiKeySetup'
 import { useToast } from '../context/ToastContext'
+import Skeleton from './Skeleton'
 
 const ActivityChart = forwardRef((props, ref) => {
   const { addToast } = useToast()
@@ -169,7 +170,17 @@ const ActivityChart = forwardRef((props, ref) => {
   }
 
   if (loading) {
-    return <div className="text-gray-500 dark:text-gray-400">Loading activity data...</div>
+    return (
+      <div className="space-y-4">
+        <Skeleton className="h-8 w-32" />
+        <Skeleton className="h-[300px] w-full" />
+        <div className="grid grid-cols-3 gap-4">
+          <Skeleton className="h-16" />
+          <Skeleton className="h-16" />
+          <Skeleton className="h-16" />
+        </div>
+      </div>
+    )
   }
 
   if (error === 'API key required') {

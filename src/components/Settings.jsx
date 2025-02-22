@@ -214,7 +214,7 @@ function Settings() {
 
           <div className="pt-4 border-t border-light-300 dark:border-dark-100">
             <div className="text-sm text-gray-500 dark:text-gray-400">
-              <p>Version: 1.0.0</p>
+              <p>Version: {window.electronAPI.getSystemInfo()?.version || '1.1.0'}</p>
               <p>Build: 2024.01</p>
             </div>
           </div>

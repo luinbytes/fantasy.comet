@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { GiftIcon } from '@heroicons/react/24/outline'
 import { useToast } from '../context/ToastContext'
+import Skeleton from './Skeleton'
 
 function JupiterLoot() {
   const { addToast } = useToast()
@@ -80,7 +81,22 @@ function JupiterLoot() {
   }
 
   if (loading) {
-    return <div className="text-gray-500 dark:text-gray-400">Loading loot history...</div>
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="space-y-2">
+            <Skeleton className="h-6 w-48" />
+            <Skeleton className="h-4 w-32" />
+          </div>
+          <Skeleton className="h-10 w-32" />
+        </div>
+        <div className="space-y-2">
+          {[1, 2, 3].map((i) => (
+            <Skeleton key={i} className="h-16 w-full" />
+          ))}
+        </div>
+      </div>
+    )
   }
 
   return (
