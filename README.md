@@ -12,13 +12,22 @@ A sleek and modern Constelia companion app built with Electron, React, and Tailw
 - 🌙 Beautiful dark theme with smooth transitions
 - 🎭 Fluid animations using Framer Motion
 - 📊 Interactive activity tracking
-- 🎲 Abundance of Jupiter integration
+- 🎲 Jupiter's Abundance integration
 - 🔔 Real-time notifications
 - 🔄 Auto-refresh system
+- 🔃 GitHub release updates
 - 🎨 Modern UI components
 - ⚡ Fast and responsive
 - 🔒 Secure API handling
 - ⚙️ Customizable settings
+
+## 📦 Releases & Updates
+
+Updates are handled through GitHub releases. When a new version is available:
+1. The app will notify you of the new version
+2. Click the notification to open the GitHub release page
+3. Download the new installer
+4. Run the installer to update
 
 ## 🚀 Getting Started
 

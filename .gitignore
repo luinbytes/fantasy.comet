@@ -34,3 +34,5 @@ Thumbs.db
 
 # Electron specific
 /out/
+/release/
+*.blockmap

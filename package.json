@@ -7,19 +7,20 @@
     "build": "vite build && copyfiles -f preload.js dist/",
     "start": "electron .",
     "dev:app": "npm run build && npm start",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "pack": "npm run build && electron-builder --dir",
+    "dist": "npm run build && electron-builder"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "description": "",
+  "description": "A sleek and modern Constelia companion app built with Electron and React",
   "dependencies": {
     "@headlessui/react": "^2.2.0",
     "@heroicons/react": "^2.0.18",
     "@vitejs/plugin-react": "^4.0.0",
     "autoprefixer": "^10.4.14",
-    "electron": "^24.3.0",
-    "electron-builder": "^23.6.0",
+    "electron-updater": "^6.3.9",
     "framer-motion": "^10.12.16",
     "postcss": "^8.4.23",
     "react": "^18.2.0",
@@ -29,6 +30,30 @@
     "vite": "^4.3.9"
   },
   "devDependencies": {
-    "copyfiles": "^2.4.1"
+    "copyfiles": "^2.4.1",
+    "electron": "^24.3.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.luinbytes.fantasycomet",
+    "productName": "Fantasy Comet",
+    "directories": {
+      "output": "release"
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "build/icon.ico"
+    },
+    "files": [
+      "dist/**/*",
+      "main.js",
+      "preload.js"
+    ],
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
   }
 }
