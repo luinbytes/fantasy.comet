@@ -44,7 +44,7 @@ const systemInfo = {
         uptime: os.uptime(),
         hostname: os.hostname(),
         username: os.userInfo().username,
-        version: '1.1.0',
+        version: '1.1.2',
         osVersion: os.release()
       }
     } catch (error) {
