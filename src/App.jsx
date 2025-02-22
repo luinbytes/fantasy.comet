@@ -139,17 +139,45 @@ function AppContent() {
     setCooldownEndTime(Date.now() + 30000) // 30 second cooldown
 
     try {
+      console.log('[REFRESH] Starting data refresh')
+      
       // System Info
       if (window.electronAPI.getSystemInfo) {
         const sysInfo = window.electronAPI.getSystemInfo()
         if (sysInfo) {
           setSystemInfo(sysInfo)
+          console.log('[REFRESH] System info updated:', sysInfo)
         }
       }
 
-      // Member Info with notifications
-      const memberInfo = await window.electronAPI.getMember('xp,history')
+      // Member Info with notifications and rolls
+      console.log('[REFRESH] Fetching member info with rolls')
+      const memberInfo = await window.electronAPI.getMember('rolls&xp&history')
+      console.log('[REFRESH] Received member info:', memberInfo)
+      
       if (memberInfo) {
+        setMemberInfo(memberInfo)
+        console.log('[REFRESH] Member info state updated')
+        
+        if (isInitialLoad) {
+          addToast(`Welcome back, ${memberInfo.username}!`, 'success')
+          setIsInitialLoad(false)
+        }
+        
+        if (memberInfo.rolls) {
+          console.log('[REFRESH] Roll data found:', memberInfo.rolls)
+          setRecentRolls(memberInfo.rolls)
+          
+          // Update roll timing
+          if (memberInfo.rolls.length > 0) {
+            const lastRoll = memberInfo.rolls[0]
+            console.log('[REFRESH] Setting last roll time:', new Date(lastRoll.timestamp))
+            setLastRollTime(new Date(lastRoll.timestamp))
+          }
+        } else {
+          console.warn('[REFRESH] No roll data in member info')
+        }
+
         setUnreadMessages(memberInfo.unread_conversations)
         
         // Show combined notification for both alerts and messages
@@ -185,7 +213,7 @@ function AppContent() {
 
       addToast('Data refreshed successfully', 'success')
     } catch (error) {
-      console.error('[ERROR] Refresh failed:', error)
+      console.error('[REFRESH] Refresh failed:', error)
       addToast('Failed to refresh data', 'error')
     } finally {
       setIsRefreshing(false)
@@ -396,23 +424,18 @@ function AppContent() {
         )
       }
     } catch (error) {
-      console.error('[ERROR] Auto-update check failed:', error)
+      console.error('[ERROR] Update check error:', error)
+      const errorMessage = {
+        'NO_INTERNET': 'No internet connection available',
+        'UPDATE_TIMEOUT': 'Update check timed out',
+        'NO_RESPONSE': 'Could not reach update server',
+        'NO_RELEASES': 'No releases found',
+        'GITHUB_API_ERROR': 'GitHub API error',
+        'INVALID_RELEASE': 'Invalid release data'
+      }[error.message] || 'Failed to check for updates'
+      
       if (!silent) {
-        // Only show errors if not silent
-        switch(error.message) {
-          case 'NO_RELEASES':
-            addToast('No releases found on GitHub', 'error')
-            break
-          case 'INVALID_RELEASE':
-            addToast('Invalid release information received', 'error')
-            break
-          case error.message.startsWith('GITHUB_API_ERROR:') && error.message:
-            const status = error.message.split(':')[1]
-            addToast(`GitHub API error (${status}). Try again later.`, 'error')
-            break
-          default:
-            addToast('Failed to check for updates. Check your connection.', 'error')
-        }
+        addToast(errorMessage, 'error')
       }
     }
   }

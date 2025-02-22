@@ -75,68 +75,48 @@ const ActivityChart = forwardRef((props, ref) => {
   }, [])
 
   const groupPostsByHour = (posts) => {
-    console.log('Raw posts data:', posts)
+    if (!posts.length) return []
 
-    // Find the oldest post time
-    const oldestPostTime = Math.min(...posts.map(post => parseInt(post.post_date)))
-    const startTime = new Date(oldestPostTime * 1000)
-    startTime.setMinutes(0, 0, 0) // Round to hour
+    // Find the time range from the posts
+    const oldestPost = Math.min(...posts.map(post => post.timestamp))
+    const newestPost = Math.max(...posts.map(post => post.timestamp))
     
-    const now = new Date()
-    now.setMinutes(0, 0, 0) // Round to hour
-
-    // Calculate hours between oldest post and now
-    const hoursDiff = Math.ceil((now - startTime) / 3600000)
+    // Round to nearest hour
+    const startTime = new Date(oldestPost)
+    startTime.setMinutes(0, 0, 0)
     
-    // Create a map to store posts by hour
-    const hourMap = new Map()
+    const endTime = new Date(newestPost)
+    endTime.setMinutes(59, 59, 999)
     
-    // Initialize hours from oldest to now
-    for (let i = 0; i <= hoursDiff; i++) {
-      const hour = new Date(startTime.getTime() + i * 3600000)
-      const timeKey = hour.getHours().toString().padStart(2, '0') + ':00'
-      hourMap.set(timeKey, { 
-        time: timeKey,
+    // Calculate number of hours between start and end
+    const hoursDiff = Math.ceil((endTime - startTime) / (60 * 60 * 1000))
+    
+    // Create array for each hour in the range
+    const hours = Array.from({ length: hoursDiff + 1 }, (_, i) => {
+      const hour = new Date(startTime.getTime() + (i * 60 * 60 * 1000))
+      return {
+        time: hour.getHours().toString().padStart(2, '0') + ':00',
         count: 0,
-        posts: []
-      })
-    }
-
-    // Group posts by hour
-    posts.forEach(post => {
-      try {
-        if (!post.post_date) {
-          console.warn('Post missing post_date field:', post)
-          return
-        }
-
-        const date = new Date(parseInt(post.post_date) * 1000)
-        if (isNaN(date.getTime())) {
-          console.warn('Invalid post_date format:', post.post_date)
-          return
-        }
-
-        const timeKey = date.getHours().toString().padStart(2, '0') + ':00'
-
-        if (hourMap.has(timeKey)) {
-          const hourData = hourMap.get(timeKey)
-          hourData.count++
-          hourData.posts.push({
-            ...post,
-            formattedDate: date.toLocaleString()
-          })
-        }
-      } catch (err) {
-        console.error('Error processing post:', err, post)
+        posts: [],
+        timestamp: hour.getTime()
       }
     })
 
-    return Array.from(hourMap.values())
-      .sort((a, b) => {
-        const timeA = parseInt(a.time.split(':')[0])
-        const timeB = parseInt(b.time.split(':')[0])
-        return timeA - timeB
-      })
+    // Group posts into hours
+    posts.forEach(post => {
+      const postDate = new Date(post.timestamp)
+      const hourIndex = Math.floor((postDate - startTime) / (60 * 60 * 1000))
+      
+      if (hourIndex >= 0 && hourIndex < hours.length) {
+        hours[hourIndex].count++
+        hours[hourIndex].posts.push({
+          ...post,
+          formattedDate: new Date(post.timestamp).toLocaleString()
+        })
+      }
+    })
+
+    return hours
   }
 
   const handlePostClick = (post) => {

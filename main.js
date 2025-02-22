@@ -100,6 +100,11 @@ ipcMain.on('show-notification', (_, { title, body }) => {
   }
 })
 
+// Add this IPC handler
+ipcMain.handle('get-app-version', () => {
+  return app.getVersion()
+})
+
 app.on('window-all-closed', () => {
   console.log('[APP] All windows closed')
   if (process.platform !== 'darwin') {
