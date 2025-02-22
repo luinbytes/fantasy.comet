@@ -1,6 +1,6 @@
-# 🎨 Modern Electron Dashboard
+# 🌟 Fantasy Comet
 
-A sleek and modern dashboard built with Electron, React, and TailwindCSS, featuring a beautiful dark theme and smooth animations.
+A sleek and modern Constelia companion app built with Electron, React, and TailwindCSS, featuring a beautiful dark theme and smooth animations.
 
 ![License](https://img.shields.io/badge/license-ISC-blue.svg)
 ![React](https://img.shields.io/badge/react-%2320232a.svg?style=flat&logo=react&logoColor=%2361DAFB)
@@ -9,11 +9,15 @@ A sleek and modern dashboard built with Electron, React, and TailwindCSS, featur
 
 ## ✨ Features
 
-- 🌙 Beautiful dark theme
-- 🎭 Smooth animations using Framer Motion
+- 🌙 Beautiful dark theme with smooth transitions
+- 🎭 Fluid animations using Framer Motion
+- 📊 Interactive activity tracking
+- 🎲 Abundance of Jupiter integration
+- 🔔 Real-time notifications
+- 🔄 Auto-refresh system
 - 🎨 Modern UI components
 - ⚡ Fast and responsive
-- 🔒 Secure window controls
+- 🔒 Secure API handling
 - ⚙️ Customizable settings
 
 ## 🚀 Getting Started
@@ -22,6 +26,7 @@ A sleek and modern dashboard built with Electron, React, and TailwindCSS, featur
 
 - Node.js (v14 or higher)
 - npm (v6 or higher)
+- Constelia API Key
 
 ### Installation
 
@@ -61,6 +66,7 @@ npm start
 - **Desktop Framework**: Electron
 - **Styling**: TailwindCSS
 - **Animations**: Framer Motion
+- **Charts**: Recharts
 - **Icons**: Heroicons
 - **Build Tool**: Vite
 
@@ -70,6 +76,17 @@ npm start
 fantasy.comet/
 ├── src/
 │   ├── components/
+│   │   ├── ActivityChart.jsx
+│   │   ├── ApiKeySetup.jsx
+│   │   ├── JupiterLoot.jsx
+│   │   ├── MemberInfo.jsx
+│   │   ├── NotificationDrawer.jsx
+│   │   ├── Settings.jsx
+│   │   ├── Toast.jsx
+│   │   └── Users.jsx
+│   ├── context/
+│   │   ├── ThemeContext.jsx
+│   │   └── ToastContext.jsx
 │   ├── App.jsx
 │   ├── main.jsx
 │   └── index.css
@@ -97,4 +114,6 @@ This project is licensed under the ISC License.
 - [Electron](https://www.electronjs.org/)
 - [TailwindCSS](https://tailwindcss.com/)
 - [Framer Motion](https://www.framer.com/motion/)
+- [Recharts](https://recharts.org/)
 - [Heroicons](https://heroicons.com/)
+- [Constelia](https://constelia.ai/)
