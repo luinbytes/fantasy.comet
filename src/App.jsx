@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { motion } from 'framer-motion'
 import { ChartBarIcon, UserGroupIcon, CogIcon, BellIcon, EnvelopeIcon, ArrowPathIcon } from '@heroicons/react/24/outline'
 import { XMarkIcon, MinusIcon, ArrowsPointingOutIcon } from '@heroicons/react/20/solid'
 import Settings from './components/Settings'
-import Users from './components/Users'
+import Software from './components/Software'
 import { ThemeProvider } from './context/ThemeContext'
 import ActivityChart from './components/ActivityChart'
 import MemberInfo from './components/MemberInfo'
@@ -32,52 +32,55 @@ function AppContent() {
   const activityChartRef = React.useRef(null)
   const [timeUntilRoll, setTimeUntilRoll] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
+  const [software, setSoftware] = useState([])
+  const [selectedSoftwareDetails, setSelectedSoftwareDetails] = useState(null)
+  const [softwareDetailsLoading, setSoftwareDetailsLoading] = useState(false)
+  const systemInfoInterval = useRef(null)
 
+  // Modify the system info effect to only run on dashboard
   useEffect(() => {
     const loadSystemInfo = () => {
-      if (typeof window.electronAPI === 'undefined') {
-        console.error('[ERROR] electronAPI is not defined')
-        if (isInitialLoad) {
-          addToast('Failed to connect to system API', 'error')
-        }
-        return
-      }
-
-      if (!window.electronAPI.getSystemInfo) {
-        console.error('[ERROR] getSystemInfo is not defined')
-        addToast('System info service unavailable', 'error')
-        return
-      }
+      if (typeof window.electronAPI === 'undefined') return
 
       try {
-        console.log('[INFO] Fetching system information...')
         const info = window.electronAPI.getSystemInfo()
-        
         if (info) {
-          setSystemInfo(info)
-          if (isInitialLoad) {
-            addToast(`Welcome back, ${info.username}!`, 'success')
-            setIsInitialLoad(false)
-          }
-        } else {
-          console.error('[ERROR] System info is null')
-          if (isInitialLoad) {
-            addToast('Failed to load system information', 'error')
-          }
+          setSystemInfo({
+            platform: info.platform,
+            arch: info.arch,
+            cpus: info.cpus,
+            totalMemory: info.totalMemory,
+            freeMemory: info.freeMemory,
+            uptime: info.uptime,
+            hostname: info.hostname,
+            username: info.username,
+            version: info.version
+          })
         }
       } catch (error) {
         console.error('[ERROR] System info fetch error:', error)
-        if (isInitialLoad) {
-          addToast('Error loading system information', 'error')
-        }
       }
     }
 
-    loadSystemInfo()
-    const interval = setInterval(loadSystemInfo, 5000)
-
-    return () => clearInterval(interval)
-  }, [addToast, isInitialLoad])
+    // Only start polling if we're on the dashboard
+    if (selectedTab === 'dashboard') {
+      loadSystemInfo() // Initial load
+      systemInfoInterval.current = setInterval(loadSystemInfo, 5000)
+      
+      return () => {
+        if (systemInfoInterval.current) {
+          clearInterval(systemInfoInterval.current)
+          systemInfoInterval.current = null
+        }
+      }
+    } else {
+      // Clean up interval if we switch away from dashboard
+      if (systemInfoInterval.current) {
+        clearInterval(systemInfoInterval.current)
+        systemInfoInterval.current = null
+      }
+    }
+  }, [selectedTab]) // Re-run when tab changes
 
   useEffect(() => {
     const fetchData = async () => {
@@ -126,9 +129,49 @@ function AppContent() {
     // That's it - no notifications or data fetching
   }
 
-  // Move all API calls to a dedicated refresh function
-  const refreshAllData = async () => {
-    // Check if in cooldown
+  // Only fetch software list during app refresh
+  const fetchAllData = async () => {
+    try {
+      setIsLoading(true)
+      
+      const [memberData, softwareData] = await Promise.all([
+        window.electronAPI.getMember('rolls&xp&history'),
+        window.electronAPI.getAllSoftware()
+      ])
+
+      setSoftware(Object.values(softwareData))
+      setMemberInfo(memberData)
+      
+      if (memberData.rolls) {
+        setRecentRolls(memberData.rolls)
+      }
+    } catch (error) {
+      console.error('[ERROR] Initial data fetch failed:', error)
+      addToast('Failed to load some data', 'error')
+    } finally {
+      setIsLoading(false)
+      setIsInitialLoad(false)
+    }
+  }
+
+  // Initial load
+  useEffect(() => {
+    fetchAllData()
+  }, [])
+
+  // Auto refresh
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (Date.now() >= nextRefreshTime) {
+        fetchAllData()
+        setNextRefreshTime(Date.now() + 300000) // 5 minutes
+      }
+    }, 1000)
+    return () => clearInterval(interval)
+  }, [nextRefreshTime])
+
+  // Manual refresh handler
+  const handleManualRefresh = async () => {
     if (Date.now() < cooldownEndTime) {
       const remainingSeconds = Math.ceil((cooldownEndTime - Date.now()) / 1000)
       addToast(`Please wait ${remainingSeconds}s before refreshing again`, 'info')
@@ -136,139 +179,10 @@ function AppContent() {
     }
 
     setIsRefreshing(true)
-    setCooldownEndTime(Date.now() + 30000) // 30 second cooldown
-
-    try {
-      console.log('[REFRESH] Starting data refresh')
-      
-      // System Info
-      if (window.electronAPI.getSystemInfo) {
-        const sysInfo = window.electronAPI.getSystemInfo()
-        if (sysInfo) {
-          setSystemInfo(sysInfo)
-          console.log('[REFRESH] System info updated:', sysInfo)
-        }
-      }
-
-      // Member Info with notifications and rolls
-      console.log('[REFRESH] Fetching member info with rolls')
-      const memberInfo = await window.electronAPI.getMember('rolls&xp&history')
-      console.log('[REFRESH] Received member info:', memberInfo)
-      
-      if (memberInfo) {
-        setMemberInfo(memberInfo)
-        console.log('[REFRESH] Member info state updated')
-        
-        if (isInitialLoad) {
-          addToast(`Welcome back, ${memberInfo.username}!`, 'success')
-          setIsInitialLoad(false)
-        }
-        
-        if (memberInfo.rolls) {
-          console.log('[REFRESH] Roll data found:', memberInfo.rolls)
-          setRecentRolls(memberInfo.rolls)
-          
-          // Update roll timing
-          if (memberInfo.rolls.length > 0) {
-            const lastRoll = memberInfo.rolls[0]
-            console.log('[REFRESH] Setting last roll time:', new Date(lastRoll.timestamp))
-            setLastRollTime(new Date(lastRoll.timestamp))
-          }
-        } else {
-          console.warn('[REFRESH] No roll data in member info')
-        }
-
-        setUnreadMessages(memberInfo.unread_conversations)
-        
-        // Show combined notification for both alerts and messages
-        const hasAlerts = memberInfo.unread_alerts > 0
-        const hasMessages = memberInfo.unread_conversations > 0
-        
-        if (hasAlerts || hasMessages) {
-          const notifications = []
-          if (hasAlerts) notifications.push(`${memberInfo.unread_alerts} alerts`)
-          if (hasMessages) notifications.push(`${memberInfo.unread_conversations} messages`)
-          addToast(`You have ${notifications.join(' and ')}`, 'info')
-        }
-        
-        // Update alerts state
-        if (hasAlerts) {
-          setAlerts([{
-            title: 'Constelia Alerts',
-            message: `You have ${memberInfo.unread_alerts} unread forum alerts`,
-            time: new Date().toLocaleString(),
-            link: 'https://constelia.ai/forums/index.php?account/alerts',
-            type: 'constelia'
-          }])
-        } else {
-          setAlerts([])
-        }
-      }
-
-      // Activity Data (separate call)
-      const posts = await window.electronAPI.getForumPosts(20)
-      if (posts && activityChartRef.current) {
-        activityChartRef.current.updateData(posts)
-      }
-
-      addToast('Data refreshed successfully', 'success')
-    } catch (error) {
-      console.error('[REFRESH] Refresh failed:', error)
-      addToast('Failed to refresh data', 'error')
-    } finally {
-      setIsRefreshing(false)
-    }
+    setCooldownEndTime(Date.now() + 30000)
+    await fetchAllData()
+    setIsRefreshing(false)
   }
-
-  // Initial data fetch only on mount
-  useEffect(() => {
-    refreshAllData()
-  }, []) // Only run on mount
-
-  // Separate manual refresh from auto refresh
-  const handleManualRefresh = async () => {
-    if (Date.now() < cooldownEndTime) {
-      addToast('Please wait before refreshing again', 'info')
-      return
-    }
-
-    setIsRefreshing(true)
-    setCooldownEndTime(Date.now() + 5000)
-
-    try {
-      await refreshAllData()
-    } catch (error) {
-      console.error('[ERROR] Refresh failed:', error)
-      addToast('Failed to refresh data', 'error')
-    } finally {
-      setIsRefreshing(false)
-    }
-  }
-
-  // Separate auto refresh function without cooldown
-  const handleAutoRefresh = async () => {
-    setIsRefreshing(true)
-    try {
-      await refreshAllData(true) // Pass true to indicate silent refresh
-      setNextRefreshTime(Date.now() + 300000) // Set next refresh time (5 minutes)
-    } catch (error) {
-      console.error('[ERROR] Auto-refresh failed:', error)
-    } finally {
-      setIsRefreshing(false)
-    }
-  }
-
-  // Auto refresh timer
-  useEffect(() => {
-    const interval = setInterval(() => {
-      const now = Date.now()
-      if (now >= nextRefreshTime) {
-        handleAutoRefresh()
-      }
-    }, 1000)
-
-    return () => clearInterval(interval)
-  }, [nextRefreshTime]) // Only depend on nextRefreshTime
 
   const formatBytes = (bytes) => {
     const gb = bytes / (1024 * 1024 * 1024)
@@ -284,7 +198,7 @@ function AppContent() {
 
   const tabTitles = {
     dashboard: 'Dashboard',
-    users: 'User Management',
+    Software: 'Software',
     settings: 'System Settings'
   }
 
@@ -336,6 +250,23 @@ function AppContent() {
     )
   }
 
+  // Software details handlers
+  const fetchSoftwareDetails = async (name) => {
+    if (!name) return
+
+    try {
+      setSoftwareDetailsLoading(true)
+      const data = await window.electronAPI.getSoftware(name, 'scripts&checksum')
+      setSelectedSoftwareDetails(data)
+    } catch (error) {
+      console.error('[ERROR] Failed to fetch software details:', error)
+      addToast('Failed to load software details', 'error')
+      setSelectedSoftwareDetails(null)
+    } finally {
+      setSoftwareDetailsLoading(false)
+    }
+  }
+
   const renderContent = () => {
     switch(selectedTab) {
       case 'settings':
@@ -349,8 +280,17 @@ function AppContent() {
             <Settings />
           </motion.div>
         )
-      case 'users':
-        return <Users systemInfo={systemInfo} />
+      case 'Software':
+        return (
+          <Software 
+            softwareData={software} 
+            loading={isLoading}
+            onSoftwareSelect={fetchSoftwareDetails}
+            selectedSoftware={selectedSoftwareDetails}
+            detailsLoading={softwareDetailsLoading}
+            onCloseDetails={() => setSelectedSoftwareDetails(null)}
+          />
+        )
       default:
         return (
           <div className="h-full flex flex-col gap-6">
@@ -607,7 +547,7 @@ function AppContent() {
           <nav className="mt-6 px-2">
             {[
               { name: 'Dashboard', icon: ChartBarIcon, id: 'dashboard' },
-              { name: 'Users', icon: UserGroupIcon, id: 'users' },
+              { name: 'Software', icon: UserGroupIcon, id: 'Software' },
               { name: 'Settings', icon: CogIcon, id: 'settings' },
             ].map((item) => (
               <motion.button

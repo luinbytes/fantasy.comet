@@ -44,10 +44,11 @@ const systemInfo = {
         uptime: os.uptime(),
         hostname: os.hostname(),
         username: os.userInfo().username,
-        version: '1.1.2',
+        version: '1.1.3',
         osVersion: os.release()
       }
     } catch (error) {
+      console.error('[ERROR] Failed to get system info:', error)
       return null
     }
   },
@@ -130,7 +131,7 @@ const systemInfo = {
       }
 
       const latestVersion = release.tag_name.replace('v', '')
-      const currentVersion = '1.1.0'
+      const currentVersion = '1.1.3'
 
       const current = currentVersion.split('.').map(Number)
       const latest = latestVersion.split('.').map(Number)
@@ -241,7 +242,79 @@ const systemInfo = {
     } catch (error) {
       throw error
     }
+  },
+
+  software: {
+    getAllSoftware: async () => {
+      try {
+        const apiKey = systemInfo.getApiKey()
+        if (!apiKey) throw new Error('API key not found')
+
+        const url = `https://constelia.ai/api.php?key=${apiKey}&cmd=getAllSoftware`
+        console.log('[SOFTWARE] Fetching software list...')
+        
+        const response = await fetch(url)
+        if (!response.ok) {
+          console.error('[SOFTWARE] API request failed:', response.status)
+          throw new Error(`API request failed: ${response.status}`)
+        }
+
+        const data = await response.json()
+        console.log('[SOFTWARE] API Response:', data) // This will show us the data structure
+        return data
+      } catch (error) {
+        console.error('[SOFTWARE] Error fetching software list:', error)
+        throw error
+      }
+    },
+    
+    getSoftware: async (name, flags = '') => {
+      try {
+        const apiKey = systemInfo.getApiKey()
+        if (!apiKey) throw new Error('API key not found')
+
+        // Add flags as parameters
+        const flagParams = flags ? `&${flags}` : ''
+        const url = `https://constelia.ai/api.php?key=${apiKey}&cmd=getSoftware&name=${name}${flagParams}`
+        
+        console.log('[SOFTWARE] Fetching software details:', name)
+        const response = await fetch(url)
+        
+        if (!response.ok) {
+          console.error('[SOFTWARE] API request failed:', response.status)
+          throw new Error(`API request failed: ${response.status}`)
+        }
+
+        const data = await response.json()
+        console.log('[SOFTWARE] API Response:', data)
+        return data
+      } catch (error) {
+        console.error('[SOFTWARE] Error fetching software details:', error)
+        throw error
+      }
+    }
   }
 }
 
-contextBridge.exposeInMainWorld('electronAPI', systemInfo) 
+contextBridge.exposeInMainWorld('electronAPI', {
+  // System methods
+  getSystemInfo: systemInfo.getSystemInfo,
+  windowControl: systemInfo.windowControl,
+  getConfig: systemInfo.getConfig,
+  saveConfig: systemInfo.saveConfig,
+  getApiKey: systemInfo.getApiKey,
+  saveApiKey: systemInfo.saveApiKey,
+  openExternal: systemInfo.openExternal,
+  openConfigFolder: systemInfo.openConfigFolder,
+  sendNotification: systemInfo.sendNotification,
+  checkForUpdates: systemInfo.checkForUpdates,
+
+  // Software methods
+  getAllSoftware: systemInfo.software.getAllSoftware,
+  getSoftware: systemInfo.software.getSoftware,
+
+  // Member methods
+  getMember: systemInfo.getMember,
+  getForumPosts: systemInfo.getForumPosts,
+  rollLoot: systemInfo.rollLoot,
+}) 
