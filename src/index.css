@@ -10,7 +10,7 @@
 body {
   margin: 0;
   padding: 0;
-  @apply bg-dark-400 text-gray-200;
+  @apply bg-light-200 text-gray-800 dark:bg-dark-400 dark:text-gray-200 transition-colors duration-200;
 }
 
 #root {
@@ -32,18 +32,18 @@ body {
 }
 
 ::-webkit-scrollbar-track {
-  background: #1f2024;
+  @apply bg-light-300 dark:bg-dark-300;
   border-radius: 5px;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #2c2e33;
+  @apply bg-light-400 dark:bg-dark-200;
   border-radius: 5px;
-  border: 2px solid #1f2024;
+  @apply border-2 border-light-300 dark:border-dark-300;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #3f4147;
+  @apply bg-gray-400 dark:bg-dark-100;
 }
 
 /* Hide scrollbar for Chrome, Safari and Opera */

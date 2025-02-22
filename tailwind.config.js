@@ -1,4 +1,5 @@
 module.exports = {
+  darkMode: 'class',
   content: [
     "./index.html",
     "./src/**/*.{js,ts,jsx,tsx}",
@@ -14,6 +15,12 @@ module.exports = {
           200: '#2c2e33',
           300: '#1f2024',
           400: '#18191c',
+        },
+        light: {
+          100: '#ffffff',
+          200: '#f3f4f6',
+          300: '#e5e7eb',
+          400: '#d1d5db',
         }
       }
     },

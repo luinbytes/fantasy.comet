@@ -5,6 +5,18 @@ export default defineConfig({
   plugins: [react()],
   base: './',
   build: {
-    outDir: 'dist'
+    outDir: 'dist',
+    commonjsOptions: {
+      include: [/node_modules/],
+      transformMixedEsModules: true
+    },
+    rollupOptions: {
+      external: ['electron']
+    }
+  },
+  resolve: {
+    alias: {
+      'recharts': 'recharts/es6'
+    }
   }
 }) 
