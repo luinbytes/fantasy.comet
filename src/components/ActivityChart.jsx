@@ -1,23 +1,76 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, forwardRef, useImperativeHandle } from 'react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import ApiKeySetup from './ApiKeySetup'
+import { useToast } from '../context/ToastContext'
 
-function ActivityChart() {
+const ActivityChart = forwardRef((props, ref) => {
+  const { addToast } = useToast()
   const [activityData, setActivityData] = useState([])
-  const [apiKey, setApiKey] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [selectedPoint, setSelectedPoint] = useState(null)
+  const [stats, setStats] = useState({
+    totalPosts: 0,
+    uniqueUsers: 0,
+    timeSpan: ''
+  })
 
+  // Expose updateData method to parent
+  useImperativeHandle(ref, () => ({
+    updateData: (posts) => {
+      if (posts) {
+        const chartData = groupPostsByHour(posts)
+        setActivityData(chartData)
+        
+        // Update stats
+        const uniqueUsers = new Set(posts.map(post => post.username)).size
+        const oldestPost = new Date(Math.min(...posts.map(post => parseInt(post.post_date) * 1000)))
+        const newestPost = new Date(Math.max(...posts.map(post => parseInt(post.post_date) * 1000)))
+        setStats({
+          totalPosts: posts.length,
+          uniqueUsers,
+          timeSpan: `${oldestPost.toLocaleString()} - ${newestPost.toLocaleString()}`
+        })
+      }
+    }
+  }))
+
+  // Initial load
   useEffect(() => {
     const storedKey = window.electronAPI.getApiKey()
-    setApiKey(storedKey)
-    
-    if (storedKey) {
-      fetchData()
-    } else {
+    if (!storedKey) {
+      setError('API key required')
       setLoading(false)
+      return
     }
+    
+    const fetchInitialData = async () => {
+      try {
+        const posts = await window.electronAPI.getForumPosts(20)
+        if (!posts) {
+          throw new Error('Failed to fetch posts')
+        }
+        
+        const chartData = groupPostsByHour(posts)
+        setActivityData(chartData)
+        
+        // Update stats
+        const uniqueUsers = new Set(posts.map(post => post.username)).size
+        const oldestPost = new Date(Math.min(...posts.map(post => parseInt(post.post_date) * 1000)))
+        const newestPost = new Date(Math.max(...posts.map(post => parseInt(post.post_date) * 1000)))
+        setStats({
+          totalPosts: posts.length,
+          uniqueUsers,
+          timeSpan: `${oldestPost.toLocaleString()} - ${newestPost.toLocaleString()}`
+        })
+      } catch (err) {
+        setError('Failed to load activity data')
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchInitialData()
   }, [])
 
   const groupPostsByHour = (posts) => {
@@ -85,31 +138,6 @@ function ActivityChart() {
       })
   }
 
-  const fetchData = async () => {
-    setLoading(true)
-    setError(null)
-    
-    try {
-      const posts = await window.electronAPI.getForumPosts(10)
-      if (posts && Array.isArray(posts)) {
-        const chartData = groupPostsByHour(posts)
-        setActivityData(chartData)
-      } else {
-        throw new Error('Invalid data format received from API')
-      }
-    } catch (err) {
-      setError('Failed to fetch activity data')
-      console.error('[ERROR] Activity fetch failed:', err)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const handleKeySet = (key) => {
-    setApiKey(key)
-    fetchData()
-  }
-
   const handlePostClick = (post) => {
     if (window.electronAPI && post) {
       // Convert title to URL-friendly format (lowercase, hyphens for spaces)
@@ -140,12 +168,19 @@ function ActivityChart() {
     }
   }
 
-  if (!apiKey) {
-    return <ApiKeySetup onKeySet={handleKeySet} />
-  }
-
   if (loading) {
     return <div className="text-gray-500 dark:text-gray-400">Loading activity data...</div>
+  }
+
+  if (error === 'API key required') {
+    return (
+      <div className="h-full flex items-center justify-center">
+        <ApiKeySetup onKeySet={() => {
+          // Refresh data after key is set
+          fetchInitialData()
+        }} />
+      </div>
+    )
   }
 
   if (error) {
@@ -154,61 +189,80 @@ function ActivityChart() {
 
   return (
     <div className="h-full relative" onClick={handleBackgroundClick}>
-      <ResponsiveContainer width="100%" height="100%">
-        <LineChart 
-          data={activityData} 
-          margin={{ top: 10, right: 30, left: 0, bottom: 5 }}
-        >
-          <CartesianGrid strokeDasharray="3 3" className="text-gray-300 dark:text-gray-700" />
-          <XAxis 
-            dataKey="time" 
-            className="text-gray-500 dark:text-gray-400"
-            tick={{ fontSize: 12 }}
-            interval="preserveStartEnd"
-          />
-          <YAxis 
-            className="text-gray-500 dark:text-gray-400"
-            tick={{ fontSize: 12 }}
-            allowDecimals={false}
-            domain={[0, 'auto']}
-          />
-          <Tooltip
-            content={({ active, payload }) => {
-              if (!active || !payload || !payload.length) return null;
-              
-              const data = payload[0].payload;
-              return (
-                <div className="bg-dark-200 rounded-lg shadow-lg p-2 border border-dark-100">
-                  <div className="text-white font-medium">
-                    {data.count} posts
+      <div className="mb-4 grid grid-cols-3 gap-4 text-sm">
+        <div className="bg-light-200 dark:bg-dark-300 rounded-lg p-3">
+          <div className="text-gray-500 dark:text-gray-400">Total Posts</div>
+          <div className="text-gray-800 dark:text-gray-200 font-medium">{stats.totalPosts}</div>
+        </div>
+        <div className="bg-light-200 dark:bg-dark-300 rounded-lg p-3">
+          <div className="text-gray-500 dark:text-gray-400">Unique Users</div>
+          <div className="text-gray-800 dark:text-gray-200 font-medium">{stats.uniqueUsers}</div>
+        </div>
+        <div className="bg-light-200 dark:bg-dark-300 rounded-lg p-3">
+          <div className="text-gray-500 dark:text-gray-400">Time Range</div>
+          <div className="text-gray-800 dark:text-gray-200 font-medium text-xs">{stats.timeSpan}</div>
+        </div>
+      </div>
+      <div className="h-[calc(100%-6rem)]">
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart 
+            data={activityData} 
+            margin={{ top: 10, right: 30, left: 0, bottom: 5 }}
+          >
+            <CartesianGrid strokeDasharray="3 3" className="text-gray-300 dark:text-gray-700" />
+            <XAxis 
+              dataKey="time" 
+              className="text-gray-500 dark:text-gray-400"
+              tick={{ fontSize: 12 }}
+              interval="preserveStartEnd"
+            />
+            <YAxis 
+              className="text-gray-500 dark:text-gray-400"
+              tick={{ fontSize: 12 }}
+              allowDecimals={false}
+              domain={[0, 'auto']}
+            />
+            <Tooltip
+              content={({ active, payload }) => {
+                if (!active || !payload || !payload.length) return null;
+                
+                const data = payload[0].payload;
+                return (
+                  <div className="bg-dark-200 rounded-lg shadow-lg p-2 border border-dark-100">
+                    <div className="text-white font-medium">
+                      {data.count} posts
+                    </div>
+                    <div className="text-gray-400 text-sm">
+                      {data.time}
+                    </div>
+                    <div className="text-gray-500 text-xs mt-1 italic">
+                      Click for more info
+                    </div>
                   </div>
-                  <div className="text-gray-400 text-sm">
-                    {data.time}
-                  </div>
-                </div>
-              );
-            }}
-            cursor={false}
-          />
-          <Line 
-            type="monotone" 
-            dataKey="count" 
-            stroke="var(--primary)" 
-            strokeWidth={2}
-            dot={{ 
-              fill: 'var(--primary)',
-              cursor: 'pointer',
-              onClick: (e) => handlePointClick(e.payload)
-            }}
-            activeDot={{
-              r: 6,
-              fill: 'var(--secondary)',
-              cursor: 'pointer',
-              onClick: (_, e) => handlePointClick(e.payload)
-            }}
-          />
-        </LineChart>
-      </ResponsiveContainer>
+                );
+              }}
+              cursor={false}
+            />
+            <Line 
+              type="monotone" 
+              dataKey="count" 
+              stroke="var(--primary)" 
+              strokeWidth={2}
+              dot={{ 
+                fill: 'var(--primary)',
+                cursor: 'pointer',
+                onClick: (e) => handlePointClick(e.payload)
+              }}
+              activeDot={{
+                r: 6,
+                fill: 'var(--secondary)',
+                cursor: 'pointer',
+                onClick: (_, e) => handlePointClick(e.payload)
+              }}
+            />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
 
       {/* Popup */}
       {selectedPoint && (
@@ -266,6 +320,8 @@ function ActivityChart() {
       )}
     </div>
   )
-}
+})
+
+ActivityChart.displayName = 'ActivityChart'
 
 export default ActivityChart 

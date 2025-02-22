@@ -1,4 +1,4 @@
-const { contextBridge, ipcRenderer, shell } = require('electron')
+const { contextBridge, ipcRenderer, shell, Notification } = require('electron')
 const os = require('os')
 const fs = require('fs')
 const path = require('path')
@@ -10,9 +10,18 @@ try {
   console.log('[TEST] Testing OS module access...')
   const testInfo = {
     platform: os.platform(),
-    arch: os.arch()
+    arch: os.arch(),
+    release: os.release(),
+    version: os.version(),
+    type: os.type(),
+    endianness: os.endianness(),
+    hostname: os.hostname(),
+    userInfo: os.userInfo().username,
+    cpus: os.cpus()[0].model,
+    totalMemory: `${Math.round(os.totalmem() / (1024 * 1024 * 1024))}GB`,
+    freeMemory: `${Math.round(os.freemem() / (1024 * 1024 * 1024))}GB`
   }
-  console.log('[TEST] OS module working:', testInfo)
+  console.log('[TEST] Detailed system info:', testInfo)
 } catch (error) {
   console.error('[ERROR] OS module test failed:', error)
 }
@@ -29,6 +38,14 @@ if (!fs.existsSync(configDir)) {
 
 const configPath = path.join(configDir, 'config.json')
 
+const defaultConfig = {
+  apiKey: null,
+  theme: 'dark',
+  notifications: true,
+  autoUpdate: false,
+  lastCheck: null
+}
+
 const systemInfo = {
   windowControl: (action) => {
     console.log('[CONTROL] Window control requested:', action)
@@ -38,15 +55,24 @@ const systemInfo = {
   getSystemInfo: () => {
     try {
       console.log('[INFO] Fetching system information...')
+      
+      // Platform name mapping
+      const platformNames = {
+        'win32': 'Windows',
+        'darwin': 'macOS',
+        'linux': 'Linux'
+      }
+
       const info = {
-        platform: os.platform(),
+        platform: platformNames[os.platform()] || os.platform(),
         arch: os.arch(),
         cpus: os.cpus(),
         totalMemory: os.totalmem(),
         freeMemory: os.freemem(),
         uptime: os.uptime(),
         hostname: os.hostname(),
-        username: os.userInfo().username
+        username: os.userInfo().username,
+        version: os.release() // Add Windows version number
       }
       console.log('[OK] System info retrieved:', info)
       return info
@@ -57,31 +83,39 @@ const systemInfo = {
   },
 
   // API Key Management
-  saveApiKey: (key) => {
+  getConfig: () => {
     try {
-      const config = fs.existsSync(configPath) ? 
-        JSON.parse(fs.readFileSync(configPath, 'utf8')) : {}
+      if (fs.existsSync(configPath)) {
+        const config = { ...defaultConfig, ...JSON.parse(fs.readFileSync(configPath, 'utf8')) }
+        return config
+      }
+      return defaultConfig
+    } catch (error) {
+      console.error('[ERROR] Failed to get config:', error)
+      return defaultConfig
+    }
+  },
+
+  saveConfig: (updates) => {
+    try {
+      const currentConfig = systemInfo.getConfig()
+      const newConfig = { ...currentConfig, ...updates }
       
-      config.apiKey = key
-      fs.writeFileSync(configPath, JSON.stringify(config, null, 2))
+      fs.writeFileSync(configPath, JSON.stringify(newConfig, null, 2))
       return true
     } catch (error) {
-      console.error('[ERROR] Failed to save API key:', error)
+      console.error('[ERROR] Failed to save config:', error)
       return false
     }
   },
 
   getApiKey: () => {
-    try {
-      if (fs.existsSync(configPath)) {
-        const config = JSON.parse(fs.readFileSync(configPath, 'utf8'))
-        return config.apiKey
-      }
-      return null
-    } catch (error) {
-      console.error('[ERROR] Failed to get API key:', error)
-      return null
-    }
+    const config = systemInfo.getConfig()
+    return config.apiKey
+  },
+
+  saveApiKey: (apiKey) => {
+    return systemInfo.saveConfig({ apiKey })
   },
 
   // Forum Posts API - Updated to match documentation exactly
@@ -121,8 +155,146 @@ const systemInfo = {
   },
 
   openExternal: (url) => {
-    if (url) {
-      shell.openExternal(url)
+    shell.openExternal(url)
+  },
+
+  // Add to systemInfo object
+  getMember: async (flags = '') => {
+    try {
+      const apiKey = systemInfo.getApiKey()
+      if (!apiKey) {
+        throw new Error('API key not found')
+      }
+
+      console.log('[API] Fetching member info with flags:', flags)
+      const url = `https://constelia.ai/api.php?key=${apiKey}&cmd=getMember${flags ? `&${flags}` : ''}`
+      console.log('[API] Request URL:', url)
+      
+      const response = await fetch(url)
+      
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error('[API] Error response:', errorText)
+        throw new Error(`API request failed: ${response.status}`)
+      }
+
+      const data = await response.json()
+      console.log('[API] Member info retrieved successfully')
+      return data
+    } catch (error) {
+      console.error('[ERROR] Failed to fetch member info:', error)
+      return null
+    }
+  },
+
+  openConfigFolder: () => {
+    try {
+      shell.openPath(configDir)
+      return true
+    } catch (error) {
+      console.error('[ERROR] Failed to open config folder:', error)
+      return false
+    }
+  },
+
+  sendNotification: (title, body) => {
+    try {
+      if (!title || !body) {
+        throw new Error('Title and body are required for notifications')
+      }
+
+      // Send to main process to show notification
+      ipcRenderer.send('show-notification', { title, body })
+      return true
+    } catch (error) {
+      console.error('[ERROR] Failed to send notification:', error)
+      return false
+    }
+  },
+
+  // Add to systemInfo object
+  rollLoot: async () => {
+    try {
+      const apiKey = systemInfo.getApiKey()
+      if (!apiKey) {
+        throw new Error('API key not found')
+      }
+
+      console.log('[API] Rolling for loot...')
+      const url = `https://constelia.ai/api.php?key=${apiKey}&cmd=rollLoot`
+      
+      const response = await fetch(url)
+      const data = await response.json()
+      
+      console.log('[API] Roll response:', data)
+      
+      if (data.status === 200 && data.message?.includes('rolled')) {
+        throw new Error(data.message)
+      }
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error('[API] Error response:', errorText)
+        throw new Error(`API request failed: ${response.status}`)
+      }
+
+      console.log('[API] Roll successful')
+      return data
+    } catch (error) {
+      console.error('[ERROR] Failed to roll for loot:', error)
+      throw error // Propagate the error to handle it in the component
+    }
+  },
+
+  checkForUpdates: async () => {
+    try {
+      console.log('[UPDATE] Checking for updates...')
+      const response = await fetch('https://api.github.com/repos/luinbytes/fantasy.comet/releases/latest')
+      
+      if (response.status === 404) {
+        console.log('[UPDATE] No releases found')
+        throw new Error('NO_RELEASES')
+      }
+
+      if (!response.ok) {
+        console.error('[UPDATE] GitHub API error:', response.status)
+        throw new Error(`GITHUB_API_ERROR:${response.status}`)
+      }
+
+      const release = await response.json()
+      
+      if (!release.tag_name) {
+        console.error('[UPDATE] Invalid release format')
+        throw new Error('INVALID_RELEASE')
+      }
+
+      const latestVersion = release.tag_name.replace('v', '')
+      const currentVersion = process.env.npm_package_version || '1.0.0'
+
+      console.log('[UPDATE] Current version:', currentVersion)
+      console.log('[UPDATE] Latest version:', latestVersion)
+
+      // Split versions into components
+      const current = currentVersion.split('.').map(Number)
+      const latest = latestVersion.split('.').map(Number)
+
+      // Compare major, minor, and patch versions
+      const isNewer = 
+        latest[0] > current[0] || // Major version
+        (latest[0] === current[0] && latest[1] > current[1]) || // Minor version
+        (latest[0] === current[0] && latest[1] === current[1] && latest[2] > current[2]) // Patch version
+
+      return {
+        currentVersion,
+        latestVersion,
+        updateAvailable: isNewer,
+        releaseUrl: release.html_url,
+        releaseNotes: release.body,
+        publishedAt: release.published_at
+      }
+    } catch (error) {
+      console.error('[ERROR] Update check failed:', error)
+      throw error
     }
   }
 }

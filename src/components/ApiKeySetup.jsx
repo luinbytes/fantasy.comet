@@ -1,7 +1,9 @@
 import React, { useState } from 'react'
 import { motion } from 'framer-motion'
+import { useToast } from '../context/ToastContext'
 
 function ApiKeySetup({ onKeySet }) {
+  const { addToast } = useToast()
   const [apiKey, setApiKey] = useState('')
   const [error, setError] = useState('')
 
@@ -9,14 +11,17 @@ function ApiKeySetup({ onKeySet }) {
     e.preventDefault()
     if (!apiKey.trim()) {
       setError('Please enter an API key')
+      addToast('Please enter an API key', 'error')
       return
     }
 
     if (window.electronAPI.saveApiKey(apiKey.trim())) {
       onKeySet(apiKey.trim())
       setError('')
+      addToast('API key saved successfully', 'success')
     } else {
       setError('Failed to save API key')
+      addToast('Failed to save API key', 'error')
     }
   }
 

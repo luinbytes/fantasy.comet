@@ -1,5 +1,9 @@
-const { app, BrowserWindow, ipcMain } = require('electron')
+const { app, BrowserWindow, ipcMain, Notification } = require('electron')
 const path = require('path')
+
+// Set app name and metadata
+app.name = 'Fantasy.Comet'
+app.setAppUserModelId('Fantasy.Comet')
 
 console.log('[START] Electron app starting...')
 
@@ -74,6 +78,25 @@ ipcMain.on('window-control', (_, action) => {
     }
   } catch (error) {
     console.error('[ERROR] Window control error:', error)
+  }
+})
+
+// Update notification handler
+ipcMain.on('show-notification', (_, { title, body }) => {
+  try {
+    if (Notification.isSupported()) {
+      new Notification({
+        title: title || app.name,
+        body,
+        icon: path.join(__dirname, 'assets', 'icon.png'),
+        silent: false,
+        appName: app.name
+      }).show()
+    } else {
+      console.warn('[WARN] Notifications not supported on this system')
+    }
+  } catch (error) {
+    console.error('[ERROR] Failed to show notification:', error)
   }
 })
 
