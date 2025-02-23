@@ -41,21 +41,9 @@ function AppContent() {
   const [selectedSoftwareDetails, setSelectedSoftwareDetails] = useState(null)
   const [softwareDetailsLoading, setSoftwareDetailsLoading] = useState(false)
   const systemInfoInterval = useRef(null)
-
-  // Add smooth scroll to element function
-  const smoothScrollToElement = useCallback((element) => {
-    if (!contentRef.current || !element) return
-
-    const elementRect = element.getBoundingClientRect()
-    const containerRect = contentRef.current.getBoundingClientRect()
-    const relativeTop = elementRect.top - containerRect.top + contentRef.current.scrollTop
-    const targetScroll = relativeTop - 100 // 100px padding from top
-
-    smoothScroll(contentRef.current, targetScroll, 500)
-  }, [])
-
-  // Expose scroll function through ref
-  const scrollRef = useRef({ smoothScrollToElement })
+  const velocityRef = useRef(0)
+  const lastDeltaRef = useRef(0)
+  const momentumRef = useRef(null)
 
   // Add smooth scroll function
   const smoothScroll = useCallback((element, target, duration = 300) => {
@@ -68,13 +56,13 @@ function AppContent() {
     const distance = target - start
     const startTime = performance.now()
 
-    const easeOutQuart = t => 1 - (--t) * t * t * t
+    const easeInOutQuad = t => t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t
 
     const animation = (currentTime) => {
       const elapsed = currentTime - startTime
       const progress = Math.min(elapsed / duration, 1)
 
-      element.scrollTop = start + distance * easeOutQuart(progress)
+      element.scrollTop = start + distance * easeInOutQuad(progress)
 
       if (progress < 1) {
         scrollAnimationRef.current = requestAnimationFrame(animation)
@@ -88,47 +76,106 @@ function AppContent() {
 
   // Add scroll event listener
   useEffect(() => {
-    const content = contentRef.current
-    if (!content) return
-
-    let accumulatedDelta = 0
-    let ticking = false
-
     const handleWheel = (e) => {
+      const scrollableElement = e.target.closest('.overflow-y-auto')
+      if (!scrollableElement) return
+
       e.preventDefault()
       
-      // Accumulate delta
-      accumulatedDelta += e.deltaY
+      const now = Date.now()
+      const timeDelta = now - lastScrollTime.current
+      lastScrollTime.current = now
 
-      // Throttle scroll updates
-      if (!ticking) {
-        requestAnimationFrame(() => {
-          const now = Date.now()
-          const timeSinceLastScroll = now - lastScrollTime.current
-          
-          // Adjust scroll speed based on frequency of scroll events
-          const scrollMultiplier = timeSinceLastScroll < 50 ? 1.5 : 1
-          const targetScroll = content.scrollTop + (accumulatedDelta * scrollMultiplier)
-          
-          smoothScroll(content, targetScroll)
-          
-          // Reset accumulated delta
-          accumulatedDelta = 0
-          ticking = false
-          lastScrollTime.current = now
-        })
-        ticking = true
+      // Calculate scroll amount based on deltaMode with further reduced sensitivity
+      const multiplier = e.deltaMode === 1 ? 8 : 0.25
+      const scrollAmount = e.deltaY * multiplier
+
+      // Update velocity based on scroll input with smooth easing
+      velocityRef.current = (scrollAmount + lastDeltaRef.current * 0.3) / 2
+      lastDeltaRef.current = scrollAmount
+
+      // Cancel any existing momentum animation
+      if (momentumRef.current) {
+        cancelAnimationFrame(momentumRef.current)
       }
+
+      // Apply immediate scroll with easing
+      scrollableElement.scrollTop += scrollAmount
+
+      // Start momentum scrolling with easing in and out
+      let velocity = velocityRef.current * 0.6
+      let time = 0
+      const applyMomentum = () => {
+        time += 1/60  // Assuming 60fps
+        
+        // Ease both in and out using a custom curve
+        const easeInOut = (t) => {
+          // Smoother easing function that starts slow, speeds up, then slows down
+          return t < 0.5 
+            ? 4 * t * t * t 
+            : 1 - Math.pow(-2 * t + 2, 3) / 2
+        }
+        
+        const easedVelocity = velocity * easeInOut(1 - Math.min(time, 1))
+        
+        if (Math.abs(easedVelocity) < 0.1) {
+          momentumRef.current = null
+          return
+        }
+
+        scrollableElement.scrollTop += easedVelocity
+        momentumRef.current = requestAnimationFrame(applyMomentum)
+      }
+
+      momentumRef.current = requestAnimationFrame(applyMomentum)
     }
 
-    content.addEventListener('wheel', handleWheel, { passive: false })
+    window.addEventListener('wheel', handleWheel, { passive: false })
+    
     return () => {
-      content.removeEventListener('wheel', handleWheel)
-      if (scrollAnimationRef.current) {
-        cancelAnimationFrame(scrollAnimationRef.current)
+      window.removeEventListener('wheel', handleWheel)
+      if (momentumRef.current) {
+        cancelAnimationFrame(momentumRef.current)
       }
     }
-  }, [smoothScroll])
+  }, [])
+
+  // Keep smooth scrolling only for programmatic scrolls (like clicking links)
+  const smoothScrollToElement = useCallback((element) => {
+    if (!contentRef.current || !element) return
+
+    const elementRect = element.getBoundingClientRect()
+    const containerRect = contentRef.current.getBoundingClientRect()
+    const relativeTop = elementRect.top - containerRect.top + contentRef.current.scrollTop
+    const targetScroll = relativeTop - 100 // 100px padding from top
+
+    // Cancel any existing animation
+    if (scrollAnimationRef.current) {
+      cancelAnimationFrame(scrollAnimationRef.current)
+    }
+
+    const start = contentRef.current.scrollTop
+    const distance = targetScroll - start
+    const duration = 300
+    const startTime = performance.now()
+
+    const easeInOutQuad = t => t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t
+
+    const animation = (currentTime) => {
+      const elapsed = currentTime - startTime
+      const progress = Math.min(elapsed / duration, 1)
+
+      contentRef.current.scrollTop = start + distance * easeInOutQuad(progress)
+
+      if (progress < 1) {
+        scrollAnimationRef.current = requestAnimationFrame(animation)
+      } else {
+        scrollAnimationRef.current = null
+      }
+    }
+
+    scrollAnimationRef.current = requestAnimationFrame(animation)
+  }, [])
 
   // Modify the system info effect to only run on dashboard
   useEffect(() => {
@@ -190,7 +237,7 @@ function AppContent() {
               link: 'https://constelia.ai/forums/index.php?account/alerts',
               type: 'constelia'
             }])
-            // Remove toast from here - only show on manual refresh
+            addToast(`You have ${memberInfo.unread_alerts} unread forum alerts`, 'info')
           } else {
             setAlerts([])
           }
@@ -227,16 +274,24 @@ function AppContent() {
     try {
       setIsLoading(true)
       
+      // Don't fetch software data if details popup is open
       const [memberData, softwareData] = await Promise.all([
         window.electronAPI.getMember('rolls&xp&history'),
-        window.electronAPI.getAllSoftware()
+        selectedSoftwareDetails ? Promise.resolve(software) : window.electronAPI.getAllSoftware()
       ])
 
-      setSoftware(Object.values(softwareData))
+      if (!selectedSoftwareDetails) {
+        setSoftware(Object.values(softwareData))
+      }
       setMemberInfo(memberData)
       
       if (memberData.rolls) {
         setRecentRolls(memberData.rolls)
+      }
+
+      // Show welcome toast only on initial load
+      if (isInitialLoad) {
+        addToast(`Welcome back, ${memberData.username || systemInfo?.username || 'User'}!`, 'success')
       }
     } catch (error) {
       console.error('[ERROR] Initial data fetch failed:', error)
@@ -442,11 +497,25 @@ function AppContent() {
   }
 
   // Add auto-update check
-  const checkForUpdates = async (silent = false) => {
-    try {
-      const config = window.electronAPI.getConfig()
-      if (!config.autoUpdate) return
+  useEffect(() => {
+    const checkUpdatesOnStartup = async () => {
+      if (isInitialLoad) {
+        console.log('[UPDATE] Checking auto-update configuration...')
+        const config = window.electronAPI.getConfig()
+        if (config.autoUpdate) {
+          console.log('[UPDATE] Auto-update enabled, checking for updates...')
+          await handleCheckUpdate(false) // Changed to false to show toasts
+        } else {
+          console.log('[UPDATE] Auto-update disabled, skipping check')
+        }
+      }
+    }
+    
+    checkUpdatesOnStartup()
+  }, [isInitialLoad])
 
+  const handleCheckUpdate = async (silent = false) => {
+    try {
       const updateInfo = await window.electronAPI.checkForUpdates()
       
       if (updateInfo.updateAvailable) {
@@ -477,13 +546,6 @@ function AppContent() {
       }
     }
   }
-
-  // Check for updates on app launch
-  useEffect(() => {
-    if (isInitialLoad) {
-      checkForUpdates(true) // Silent check on launch
-    }
-  }, [isInitialLoad])
 
   // Fetch member info and roll data
   const fetchMemberData = async (silent = false) => {
@@ -672,7 +734,7 @@ function AppContent() {
           {/* Header */}
           <div className="h-14 bg-light-100 dark:bg-dark-200 shadow-sm flex items-center justify-between px-8 z-10">
             <h2 className="text-xl font-semibold text-gray-800 dark:text-gray-200">
-              Welcome back, {systemInfo?.username || 'User'}!
+              Welcome back, {memberInfo?.username || systemInfo?.username || 'User'}!
             </h2>
             <div className="flex items-center space-x-4">
               {/* Refresh Button with Timer */}
@@ -750,7 +812,7 @@ function AppContent() {
                 </div>
               </div>
             ) : (
-              <ForumContext.Provider value={{ scrollRef }}>
+              <ForumContext.Provider value={{ scrollRef: { smoothScrollToElement } }}>
                 {renderContent()}
               </ForumContext.Provider>
             )}

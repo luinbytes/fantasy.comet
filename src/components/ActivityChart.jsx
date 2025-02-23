@@ -162,16 +162,11 @@ const ActivityChart = forwardRef((props, ref) => {
 
   const handlePostClick = (post) => {
     if (window.electronAPI && post) {
-      // Convert title to URL-friendly format (lowercase, hyphens for spaces)
-      const urlTitle = post.title
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '-') // Replace non-alphanumeric chars with hyphens
-        .replace(/^-+|-+$/g, ''); // Remove leading/trailing hyphens
-
-      // Construct URL with both thread_id and post_id to link directly to the post
-      const forumUrl = `https://constelia.ai/forums/index.php?threads/${urlTitle}.${post.thread_id}/post-${post.post_id}`;
-      console.log('Opening forum URL:', forumUrl, post);
-      window.electronAPI.openExternal(forumUrl);
+      // If post.id is different from thread_id, it's a reply, so include the post ID
+      const forumUrl = post.id !== post.thread_id 
+        ? `https://constelia.ai/forums/index.php?threads/${post.thread_id}/post-${post.id}`
+        : `https://constelia.ai/forums/index.php?threads/${post.thread_id}`
+      window.electronAPI.openExternal(forumUrl)
     }
   }
 

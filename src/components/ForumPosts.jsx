@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useContext } from 'react'
+import React, { useState, useEffect, useContext, useRef } from 'react'
 import { motion } from 'framer-motion'
 import { ChatBubbleLeftIcon, ArrowTopRightOnSquareIcon } from '@heroicons/react/24/outline'
 import { useToast } from '../context/ToastContext'
@@ -11,22 +11,60 @@ function ForumPosts() {
   const [loading, setLoading] = useState(true)
   const { addToast } = useToast()
   const { scrollRef } = useContext(ForumContext)
+  const postRefs = useRef({})
 
-  // Add ref for posts
-  const postRefs = React.useRef({})
+  const domPurifyConfig = {
+    ADD_TAGS: ['bb', 'spoiler', 'iframe', 'div'],
+    ADD_ATTR: [
+      'quote-author', 
+      'onclick', 
+      'allowfullscreen', 
+      'frameborder', 
+      'allow', 
+      'src', 
+      'title', 
+      'class', 
+      'style',
+      'loading',
+      'data-video-container',
+      'rel',
+      'target',
+      'width',
+      'height'
+    ],
+    ALLOW_DATA_ATTR: true,
+    RETURN_DOM_FRAGMENT: false,
+    RETURN_DOM: false,
+    WHOLE_DOCUMENT: false,
+    SANITIZE_DOM: true,
+    RETURN_TRUSTED_TYPE: false,
+    FORBID_TAGS: ['script', 'style', 'form'],
+    FORBID_ATTR: ['onerror', 'onload', 'onmouseover'],
+    USE_PROFILES: {
+      html: true,
+      svg: false,
+      svgFilters: false,
+      mathMl: false
+    },
+    ALLOWED_URI_REGEXP: /^(?:(?:(?:f|ht)tps?|mailto|tel|callto|cid|xmpp|xxx):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i,
+    SAFE_FOR_TEMPLATES: false,
+    ALLOW_UNKNOWN_PROTOCOLS: true,
+    FORCE_BODY: true,
+    ALLOWED_TAGS: ['iframe', 'div', 'br', 'p', 'span', 'strong', 'em', 'u', 'del', 'blockquote', 'pre', 'code', 'a', 'img', 'ul', 'ol', 'li', 'table', 'tr', 'td', 'th', 'hr', 'mark', 'sub', 'sup'],
+    ALLOWED_ATTR: ['src', 'class', 'style', 'allowfullscreen', 'frameborder', 'allow', 'title', 'loading', 'data-video-container']
+  }
 
-  // Initialize DOMPurify for the window context
   useEffect(() => {
     if (window) {
-      DOMPurify.setConfig({
-        ADD_TAGS: ['bb', 'spoiler'],
-        ADD_ATTR: ['quote-author', 'onclick']
-      })
+      DOMPurify.setConfig(domPurifyConfig)
+      console.log('DOMPurify configuration set:', domPurifyConfig)
     }
   }, [])
 
   const parseBBCode = (text) => {
     if (!text) return ''
+
+    console.log('Raw post content:', text)
 
     let html = text
 
@@ -74,8 +112,37 @@ function ForumPosts() {
         '<img src="$2" class="max-w-full rounded my-2" alt="$1" loading="lazy" />')
       .replace(/\[img\](.*?)\[\/img\]/gi,
         '<img src="$1" class="max-w-full rounded my-2" alt="Posted image" loading="lazy" />')
-      .replace(/\[youtube\](.*?)\[\/youtube\]/gi,
-        '<div class="relative pt-[56.25%] my-2"><iframe class="absolute inset-0 w-full h-full rounded" src="https://www.youtube.com/embed/$1" frameborder="0" allowfullscreen></iframe></div>')
+      // Handle both YouTube BBCode formats
+      .replace(/\[MEDIA=youtube\](.*?)\[\/MEDIA\]/gi, (match, videoId) => {
+        console.log('YouTube MEDIA match:', {
+          fullMatch: match,
+          extractedId: videoId,
+          cleanId: videoId.trim()
+        })
+        const cleanVideoId = videoId.trim()
+        if (!cleanVideoId) {
+          console.log('Invalid video ID, returning original match')
+          return match
+        }
+        const embedHtml = `<div class="relative pt-[56.25%] my-4 bg-dark-300" data-video-container><iframe class="absolute inset-0 w-full h-full rounded" src="https://www.youtube.com/embed/${cleanVideoId}?rel=0" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen="allowfullscreen" loading="lazy"></iframe></div>`
+        console.log('Generated embed HTML:', embedHtml)
+        return embedHtml
+      })
+      .replace(/\[youtube\](.*?)\[\/youtube\]/gi, (match, videoId) => {
+        console.log('YouTube tag match:', {
+          fullMatch: match,
+          extractedId: videoId,
+          cleanId: videoId.trim()
+        })
+        const cleanVideoId = videoId.trim()
+        if (!cleanVideoId) {
+          console.log('Invalid video ID, returning original match')
+          return match
+        }
+        const embedHtml = `<div class="relative pt-[56.25%] my-4 bg-dark-300" data-video-container><iframe class="absolute inset-0 w-full h-full rounded" src="https://www.youtube.com/embed/${cleanVideoId}?rel=0" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen="allowfullscreen" loading="lazy"></iframe></div>`
+        console.log('Generated embed HTML:', embedHtml)
+        return embedHtml
+      })
       
       // Enhanced spoiler support
       .replace(/\[spoiler="([^"]+)"\]([\s\S]*?)\[\/spoiler\]/gi,
@@ -168,22 +235,16 @@ function ForumPosts() {
       .replace(/\n/g, '<br />')
 
     // Sanitize and return
-    return DOMPurify.sanitize(html, {
-      ALLOWED_TAGS: [
-        'strong', 'em', 'u', 'del', 'a', 'blockquote', 'pre', 'img', 'br',
-        'ul', 'ol', 'li', 'p', 'div', 'span', 'iframe', 'table', 'tr', 'td',
-        'th', 'hr', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'sub', 'sup', 'mark',
-        'dir', 'code'
-      ],
-      ALLOWED_ATTR: [
-        'href', 'class', 'target', 'rel', 'src', 'alt', 'loading',
-        'style', 'frameborder', 'allowfullscreen', 'dir', 'onclick',
-        'data-id', 'data-type'
-      ],
-      ALLOWED_STYLES: ['color', 'font-size', 'font-family'],
-      ADD_ATTR: ['onclick'],
-      ALLOW_DATA_ATTR: true
+    console.log('Pre-sanitized HTML:', html)
+    const sanitized = DOMPurify.sanitize(html, {
+      ...domPurifyConfig,
+      RETURN_DOM_FRAGMENT: false,
+      RETURN_DOM: false,
+      ADD_TAGS: ['iframe', 'div', 'br'],
+      ADD_ATTR: ['src', 'class', 'style', 'allowfullscreen', 'frameborder', 'allow', 'title', 'loading', 'data-video-container']
     })
+    console.log('Final sanitized HTML:', sanitized)
+    return sanitized
   }
 
   // Group posts by thread and sort chronologically

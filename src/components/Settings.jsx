@@ -1,10 +1,11 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { 
   MoonIcon, 
   BellIcon, 
   ArrowPathIcon,
-  FolderIcon 
+  FolderIcon,
+  MagnifyingGlassIcon 
 } from '@heroicons/react/24/outline'
 import { useTheme } from '../context/ThemeContext'
 import { useToast } from '../context/ToastContext'
@@ -35,10 +36,13 @@ function Settings() {
   const handleAutoUpdateChange = (enabled) => {
     setAutoUpdate(enabled)
     window.electronAPI.saveConfig({ autoUpdate: enabled })
-    addToast(
-      `Auto updates ${enabled ? 'enabled' : 'disabled'}`,
-      'info'
-    )
+    if (enabled) {
+      addToast('Auto updates enabled - checking for updates...', 'info')
+      // Trigger an immediate update check when enabling
+      handleCheckUpdate(true)
+    } else {
+      addToast('Auto updates disabled - use Check Now button to check manually', 'info')
+    }
   }
 
   const handleOpenConfigFolder = () => {
@@ -49,11 +53,13 @@ function Settings() {
     }
   }
 
-  const handleCheckUpdate = async () => {
+  const handleCheckUpdate = async (silent = false) => {
     if (checking) return
     
     setChecking(true)
-    addToast('Checking for updates...', 'info')
+    if (!silent) {
+      addToast('Checking for updates...', 'info')
+    }
 
     try {
       const updateInfo = await window.electronAPI.checkForUpdates()
@@ -64,7 +70,7 @@ function Settings() {
           'info'
         )
         window.electronAPI.openExternal(updateInfo.releaseUrl)
-      } else {
+      } else if (!silent) {
         addToast(
           `You're running the latest version (v${updateInfo.currentVersion})`, 
           'success'
@@ -73,20 +79,23 @@ function Settings() {
     } catch (error) {
       console.error('Update check failed:', error)
       
-      // Handle specific error cases
-      switch(error.message) {
-        case 'NO_RELEASES':
-          addToast('No releases found on GitHub', 'error')
-          break
-        case 'INVALID_RELEASE':
-          addToast('Invalid release information received', 'error')
-          break
-        case error.message.startsWith('GITHUB_API_ERROR:') && error.message:
-          const status = error.message.split(':')[1]
-          addToast(`GitHub API error (${status}). Try again later.`, 'error')
-          break
-        default:
-          addToast('Failed to check for updates. Check your connection.', 'error')
+      // Only show error toasts for manual checks
+      if (!silent) {
+        // Handle specific error cases
+        switch(error.message) {
+          case 'NO_RELEASES':
+            addToast('No releases found on GitHub', 'error')
+            break
+          case 'INVALID_RELEASE':
+            addToast('Invalid release information received', 'error')
+            break
+          case error.message.startsWith('GITHUB_API_ERROR:') && error.message:
+            const status = error.message.split(':')[1]
+            addToast(`GitHub API error (${status}). Try again later.`, 'error')
+            break
+          default:
+            addToast('Failed to check for updates. Check your connection.', 'error')
+        }
       }
     } finally {
       setChecking(false)
@@ -124,6 +133,16 @@ function Settings() {
                   isDarkMode ? 'translate-x-6' : 'translate-x-1'
                 }`}
               />
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <MagnifyingGlassIcon className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+              <span className="text-gray-600 dark:text-gray-400">Window Zoom</span>
+            </div>
+            <div className="text-sm text-gray-500 dark:text-gray-400">
+              Use Ctrl - or Ctrl Shift + to adjust
             </div>
           </div>
 
@@ -204,7 +223,7 @@ function Settings() {
               <span className="text-gray-600 dark:text-gray-400">Check for Updates</span>
             </div>
             <button
-              onClick={handleCheckUpdate}
+              onClick={() => handleCheckUpdate(false)}
               disabled={checking}
               className="px-3 py-1.5 rounded-lg bg-light-200 dark:bg-dark-300 text-gray-600 dark:text-gray-400 hover:bg-light-300 dark:hover:bg-dark-100"
             >
@@ -214,7 +233,7 @@ function Settings() {
 
           <div className="pt-4 border-t border-light-300 dark:border-dark-100">
             <div className="text-sm text-gray-500 dark:text-gray-400">
-              <p>Version: {window.electronAPI.getSystemInfo()?.version || '1.1.0'}</p>
+              <p>Version: {window.electronAPI.getSystemInfo()?.version || '1.3.0'}</p>
               <p>Build: 2024.01</p>
             </div>
           </div>

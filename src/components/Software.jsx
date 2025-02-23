@@ -108,7 +108,7 @@ function Software({
     const formatScript = (script) => {
       return {
         name: script.name,
-        version: script.software,
+        version: script.software,  // This is the version number (e.g. "5")
         author: script.author,
         lastUpdate: script.last_update,
         categories: script.categories || [],
@@ -124,20 +124,25 @@ function Software({
       }
     }
 
+    // Prevent event bubbling on modal content click
+    const handleModalClick = (e) => {
+      e.stopPropagation()
+    }
+
     return (
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center"
+        className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 overflow-y-auto"
         onClick={onClose}
       >
         <motion.div
           initial={{ scale: 0.9, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           exit={{ scale: 0.9, opacity: 0 }}
-          className="bg-light-100 dark:bg-dark-200 rounded-xl p-6 max-w-2xl w-full mx-4 shadow-xl overflow-y-auto max-h-[90vh]"
-          onClick={e => e.stopPropagation()}
+          className="modal-content bg-light-100 dark:bg-dark-200 rounded-xl p-6 max-w-2xl w-full mx-auto my-8 shadow-xl overflow-y-auto"
+          onClick={handleModalClick}
         >
           {detailsLoading ? (
             <div className="space-y-4">
@@ -188,59 +193,128 @@ function Software({
               )}
 
               {software.scripts && software.scripts.length > 0 && (
-                <div>
-                  <h3 className="text-lg font-medium text-gray-800 dark:text-gray-200 mb-2">
-                    Available Scripts
-                  </h3>
-                  <div className="space-y-3">
-                    {software.scripts.map((rawScript, index) => {
-                      const script = formatScript(rawScript)
-                      return (
-                        <div 
-                          key={script.id || index}
-                          className="bg-light-200 dark:bg-dark-300 p-4 rounded"
-                        >
-                          <div className="flex items-start justify-between mb-2">
-                            <div>
-                              <div className="font-medium text-gray-800 dark:text-gray-200">
-                                {script.name}
+                <div className="space-y-6">
+                  {/* Software-specific scripts */}
+                  <div>
+                    <h3 className="text-lg font-medium text-gray-800 dark:text-gray-200 mb-2">
+                      Available Scripts
+                    </h3>
+                    <div className="space-y-3">
+                      {software.scripts
+                        .filter(script => String(script.software) === String(software.version))
+                        .map((rawScript, index) => {
+                          const script = formatScript(rawScript)
+                          return (
+                            <div 
+                              key={script.id || index}
+                              className="bg-light-200 dark:bg-dark-300 p-4 rounded"
+                            >
+                              <div className="flex items-start justify-between mb-2">
+                                <div>
+                                  <div className="font-medium text-gray-800 dark:text-gray-200">
+                                    {script.name}
+                                  </div>
+                                  <div className="text-sm text-gray-500 dark:text-gray-400">
+                                    by {script.author}
+                                  </div>
+                                </div>
+                                {script.forum && (
+                                  <button 
+                                    className="text-primary hover:text-primary/80 text-sm"
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      window.electronAPI.openExternal(script.forum)
+                                    }}
+                                  >
+                                    Forum Thread
+                                  </button>
+                                )}
                               </div>
-                              <div className="text-sm text-gray-500 dark:text-gray-400">
-                                by {script.author} • Version {script.version}
+                              {script.categoryNames.length > 0 && (
+                                <div className="flex flex-wrap gap-2 mt-2">
+                                  {script.categoryNames.map((category, i) => (
+                                    <span 
+                                      key={i}
+                                      className="px-2 py-1 bg-primary/5 text-primary text-xs rounded-full"
+                                    >
+                                      {category}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                              {script.updateNotes && (
+                                <div className="mt-2 text-sm text-gray-600 dark:text-gray-300">
+                                  {script.updateNotes}
+                                </div>
+                              )}
+                            </div>
+                          )
+                        })}
+                    </div>
+                  </div>
+
+                  {/* Global scripts */}
+                  <div>
+                    <div className="flex items-center gap-2 mb-2">
+                      <h3 className="text-lg font-medium text-gray-800 dark:text-gray-200">
+                        Global Scripts
+                      </h3>
+                      <span className="text-xs text-gray-500 dark:text-gray-400">
+                        (Shared utility scripts)
+                      </span>
+                    </div>
+                    <div className="space-y-3">
+                      {software.scripts
+                        .filter(script => String(script.software) === "4")
+                        .map((rawScript, index) => {
+                          const script = formatScript(rawScript)
+                          return (
+                            <div 
+                              key={script.id || index}
+                              className="bg-light-200 dark:bg-dark-300 p-4 rounded border border-primary/10"
+                            >
+                              <div className="flex items-start justify-between mb-2">
+                                <div>
+                                  <div className="font-medium text-gray-800 dark:text-gray-200">
+                                    {script.name}
+                                  </div>
+                                  <div className="text-sm text-gray-500 dark:text-gray-400">
+                                    by {script.author}
+                                  </div>
+                                </div>
+                                {script.forum && (
+                                  <button 
+                                    className="text-primary hover:text-primary/80 text-sm"
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      window.electronAPI.openExternal(script.forum)
+                                    }}
+                                  >
+                                    Forum Thread
+                                  </button>
+                                )}
                               </div>
+                              {script.categoryNames.length > 0 && (
+                                <div className="flex flex-wrap gap-2 mt-2">
+                                  {script.categoryNames.map((category, i) => (
+                                    <span 
+                                      key={i}
+                                      className="px-2 py-1 bg-primary/5 text-primary text-xs rounded-full"
+                                    >
+                                      {category}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                              {script.updateNotes && (
+                                <div className="mt-2 text-sm text-gray-600 dark:text-gray-300">
+                                  {script.updateNotes}
+                                </div>
+                              )}
                             </div>
-                            {script.forum && (
-                              <button 
-                                className="text-primary hover:text-primary/80 text-sm"
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  window.electronAPI.openExternal(script.forum)
-                                }}
-                              >
-                                Forum Thread
-                              </button>
-                            )}
-                          </div>
-                          {script.categoryNames.length > 0 && (
-                            <div className="flex flex-wrap gap-2 mt-2">
-                              {script.categoryNames.map((category, i) => (
-                                <span 
-                                  key={i}
-                                  className="px-2 py-1 bg-primary/5 text-primary text-xs rounded-full"
-                                >
-                                  {category}
-                                </span>
-                              ))}
-                            </div>
-                          )}
-                          {script.updateNotes && (
-                            <div className="mt-2 text-sm text-gray-600 dark:text-gray-300">
-                              {script.updateNotes}
-                            </div>
-                          )}
-                        </div>
-                      )
-                    })}
+                          )
+                        })}
+                    </div>
                   </div>
                 </div>
               )}
