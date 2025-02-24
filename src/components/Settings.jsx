@@ -270,7 +270,7 @@ function Settings() {
 
           <div className="pt-4 border-t border-light-300 dark:border-dark-100">
             <div className="text-sm text-gray-500 dark:text-gray-400">
-              <p>Version: {window.electronAPI.getSystemInfo()?.version || '1.4.0'}</p>
+              <p>Version: {window.electronAPI.getSystemInfo()?.version}</p>
               <p>Build: {process.env.BUILD_DATE || new Date().toISOString().split('T')[0].replace(/-/g, '.')}</p>
             </div>
           </div>

@@ -2,6 +2,7 @@ const { app, BrowserWindow, ipcMain, Notification, session } = require('electron
 const path = require('path')
 const fs = require('fs')
 const os = require('os')
+const { version } = require('./package.json')
 
 // Config setup
 const configDir = path.join(process.env.APPDATA || (process.platform === 'darwin' ? 
@@ -52,7 +53,7 @@ function createWindow() {
   })
   
   // Set custom user agent to avoid potential blocking
-  forumSession.setUserAgent('Fantasy.Comet/1.4.0 (Electron)')
+  forumSession.setUserAgent(`Fantasy.Comet/${version} (Electron)`)
 
   win = new BrowserWindow({
     width: 1200,

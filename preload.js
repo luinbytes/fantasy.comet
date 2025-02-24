@@ -2,6 +2,7 @@ const { contextBridge, ipcRenderer, shell, Notification } = require('electron')
 const os = require('os')
 const fs = require('fs')
 const path = require('path')
+const { version } = require('./package.json')
 
 // Config setup
 const configDir = path.join(process.env.APPDATA || (process.platform === 'darwin' ? 
@@ -45,7 +46,7 @@ const systemInfo = {
         uptime: os.uptime(),
         hostname: os.hostname(),
         username: os.userInfo().username,
-        version: '1.4.0',
+        version: version,
         osVersion: os.release()
       }
     } catch (error) {
@@ -132,7 +133,7 @@ const systemInfo = {
       }
 
       const latestVersion = release.tag_name.replace('v', '')
-      const currentVersion = '1.4.0'
+      const currentVersion = version
 
       const current = currentVersion.split('.').map(Number)
       const latest = latestVersion.split('.').map(Number)

@@ -280,12 +280,14 @@ function AppContent() {
     try {
       setIsLoading(true)
       
-      // Don't fetch software data if details popup is open
-      const [memberData, softwareData] = await Promise.all([
-        window.electronAPI.getMember('rolls&xp&history'),
-        selectedSoftwareDetails ? Promise.resolve(software) : window.electronAPI.getAllSoftware()
-      ])
+      // Fetch system info first
+      const systemInfo = window.electronAPI.getSystemInfo()
+      setSystemInfo(systemInfo)
 
+      // Fetch member data
+      const memberData = await window.electronAPI.getMember()
+      
+      // Fetch software data if not already loaded
       if (!selectedSoftwareDetails) {
         setSoftware(Object.values(softwareData))
       }
@@ -295,16 +297,16 @@ function AppContent() {
         setRecentRolls(memberData.rolls)
       }
 
-      // Show welcome toast only on initial load
+      // Show welcome toast only on initial load, not during refreshes
       if (isInitialLoad) {
         addToast(`Welcome back, ${memberData.username || systemInfo?.username || 'User'}!`, 'success')
+        setIsInitialLoad(false)
       }
     } catch (error) {
       console.error('[ERROR] Initial data fetch failed:', error)
       addToast('Failed to load some data', 'error')
     } finally {
       setIsLoading(false)
-      setIsInitialLoad(false)
     }
   }
 
