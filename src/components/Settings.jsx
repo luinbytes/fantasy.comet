@@ -5,7 +5,8 @@ import {
   BellIcon, 
   ArrowPathIcon,
   FolderIcon,
-  MagnifyingGlassIcon 
+  MagnifyingGlassIcon,
+  GlobeAltIcon
 } from '@heroicons/react/24/outline'
 import { useTheme } from '../context/ThemeContext'
 import { useToast } from '../context/ToastContext'
@@ -137,12 +138,38 @@ function Settings() {
           </div>
 
           <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-2">
-              <MagnifyingGlassIcon className="w-5 h-5 text-gray-600 dark:text-gray-400" />
-              <span className="text-gray-600 dark:text-gray-400">Window Zoom</span>
+            <div className="flex flex-col">
+              <div className="flex items-center space-x-2">
+                <GlobeAltIcon className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+                <span className="text-gray-600 dark:text-gray-400">Open Forum Links In-App</span>
+              </div>
+              <span className="text-xs text-gray-500 dark:text-gray-400 mt-1 ml-7">
+                Shift + Click any forum link to open in a popup window
+              </span>
             </div>
-            <div className="text-sm text-gray-500 dark:text-gray-400">
-              Use Ctrl - or Ctrl Shift + to adjust
+            <div
+              role="button"
+              tabIndex={0}
+              onClick={() => {
+                const newValue = !window.electronAPI.getConfig().openForumInApp
+                window.electronAPI.saveConfig({ openForumInApp: newValue })
+                addToast(
+                  `Forum links will ${newValue ? 'open in app' : 'open in external browser'}`,
+                  'info'
+                )
+              }}
+              onKeyDown={(e) => e.key === 'Enter' && window.electronAPI.saveConfig({ 
+                openForumInApp: !window.electronAPI.getConfig().openForumInApp 
+              })}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none cursor-pointer ${
+                window.electronAPI.getConfig().openForumInApp ? 'bg-primary' : 'bg-gray-400'
+              }`}
+            >
+              <span
+                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-200 ease-in-out ${
+                  window.electronAPI.getConfig().openForumInApp ? 'translate-x-6' : 'translate-x-1'
+                }`}
+              />
             </div>
           </div>
 
@@ -189,6 +216,16 @@ function Settings() {
               />
             </div>
           </div>
+
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <MagnifyingGlassIcon className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+              <span className="text-gray-600 dark:text-gray-400">Window Zoom</span>
+            </div>
+            <div className="text-sm text-gray-500 dark:text-gray-400">
+              Use Ctrl - or Ctrl Shift + to adjust
+            </div>
+          </div>
         </div>
       </motion.div>
 
@@ -233,8 +270,8 @@ function Settings() {
 
           <div className="pt-4 border-t border-light-300 dark:border-dark-100">
             <div className="text-sm text-gray-500 dark:text-gray-400">
-              <p>Version: {window.electronAPI.getSystemInfo()?.version || '1.3.0'}</p>
-              <p>Build: 2024.01</p>
+              <p>Version: {window.electronAPI.getSystemInfo()?.version || '1.4.0'}</p>
+              <p>Build: {process.env.BUILD_DATE || new Date().toISOString().split('T')[0].replace(/-/g, '.')}</p>
             </div>
           </div>
         </div>

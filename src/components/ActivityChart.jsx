@@ -80,31 +80,18 @@ const ActivityChart = forwardRef((props, ref) => {
   const groupPostsByHour = (posts) => {
     if (!posts.length) return []
 
-    console.log('[DEBUG] Raw posts:', posts)
-
     // Find the time range from the posts
     const timestamps = posts.map(post => {
-      console.log('[DEBUG] Processing post:', {
-        id: post.id,
-        post_date: post.post_date,
-        parsed_date: parseInt(post.post_date),
-        milliseconds: parseInt(post.post_date) * 1000,
-        date_object: new Date(parseInt(post.post_date) * 1000)
-      })
-      return parseInt(post.post_date) * 1000
+      const timestamp = parseInt(post.post_date) * 1000
+      if (isNaN(timestamp)) {
+        console.error(`[ACTIVITY] Invalid post date: ${post.post_date}`)
+        return Date.now() // Fallback to current time
+      }
+      return timestamp
     })
-
-    console.log('[DEBUG] Processed timestamps:', timestamps)
 
     const oldestPost = Math.min(...timestamps)
     const newestPost = Math.max(...timestamps)
-    
-    console.log('[DEBUG] Time range:', {
-      oldestPost,
-      newestPost,
-      oldestDate: new Date(oldestPost),
-      newestDate: new Date(newestPost)
-    })
     
     // Round to nearest hour
     const startTime = new Date(oldestPost)
@@ -115,12 +102,6 @@ const ActivityChart = forwardRef((props, ref) => {
     
     // Calculate number of hours between start and end
     const hoursDiff = Math.ceil((endTime - startTime) / (60 * 60 * 1000))
-    
-    console.log('[DEBUG] Hour calculations:', {
-      startTime,
-      endTime,
-      hoursDiff
-    })
 
     // Create array for each hour in the range
     const hours = Array.from({ length: hoursDiff + 1 }, (_, i) => {
@@ -138,14 +119,6 @@ const ActivityChart = forwardRef((props, ref) => {
       const postDate = new Date(parseInt(post.post_date) * 1000)
       const hourIndex = Math.floor((postDate - startTime) / (60 * 60 * 1000))
       
-      console.log('[DEBUG] Post grouping:', {
-        post_id: post.id,
-        post_date: post.post_date,
-        postDate,
-        hourIndex,
-        valid_index: hourIndex >= 0 && hourIndex < hours.length
-      })
-      
       if (hourIndex >= 0 && hourIndex < hours.length) {
         hours[hourIndex].count++
         hours[hourIndex].posts.push({
@@ -154,8 +127,6 @@ const ActivityChart = forwardRef((props, ref) => {
         })
       }
     })
-
-    console.log('[DEBUG] Final hours array:', hours)
 
     return hours
   }

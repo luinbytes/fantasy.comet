@@ -20,24 +20,12 @@ const defaultConfig = {
   notifications: true,
   autoUpdate: false,
   lastCheck: null,
-  zoomLevel: 1  // Add default zoom level
+  openForumInApp: true
 }
 
 const systemInfo = {
   windowControl: (action) => {
     ipcRenderer.send('window-control', action)
-  },
-
-  setZoom: (direction) => {
-    ipcRenderer.send('set-zoom', direction)
-  },
-
-  getZoomLevel: async () => {
-    return await ipcRenderer.invoke('get-zoom-level')
-  },
-
-  onZoomUpdate: (callback) => {
-    ipcRenderer.on('zoom-updated', (_, level) => callback(level))
   },
 
   getSystemInfo: () => {
@@ -57,11 +45,11 @@ const systemInfo = {
         uptime: os.uptime(),
         hostname: os.hostname(),
         username: os.userInfo().username,
-        version: '1.3.0',
+        version: '1.4.0',
         osVersion: os.release()
       }
     } catch (error) {
-      console.error('[ERROR] Failed to get system info:', error)
+      console.error(`[SYSTEM] Failed to get system info: ${error.message}`)
       return null
     }
   },
@@ -144,7 +132,7 @@ const systemInfo = {
       }
 
       const latestVersion = release.tag_name.replace('v', '')
-      const currentVersion = '1.3.0'
+      const currentVersion = '1.4.0'
 
       const current = currentVersion.split('.').map(Number)
       const latest = latestVersion.split('.').map(Number)
@@ -178,7 +166,6 @@ const systemInfo = {
       const response = await fetch(url)
       
       if (!response.ok) {
-        console.error('[ERROR] API request failed:', response.status)
         throw new Error(`API request failed: ${response.status}`)
       }
 
@@ -196,7 +183,7 @@ const systemInfo = {
 
       return data
     } catch (error) {
-      console.error('[ERROR] Failed to fetch member data:', error)
+      console.error(`[MEMBER] ${error.message}`)
       throw error
     }
   },
@@ -223,7 +210,7 @@ const systemInfo = {
         return dateA - dateB
       })
       
-      const transformedPosts = sortedPosts.map(post => {
+      return sortedPosts.map(post => {
         const timestamp = parseInt(String(post.post_date).replace(/"/g, ''))
         const milliseconds = timestamp * 1000
         const dateObj = new Date(milliseconds)
@@ -240,10 +227,8 @@ const systemInfo = {
           formatted_date: dateObj.toLocaleString()
         }
       })
-
-      return transformedPosts
     } catch (error) {
-      console.error('[ERROR] Failed to fetch forum posts:', error)
+      console.error(`[FORUM] ${error.message}`)
       throw error
     }
   },
@@ -330,8 +315,4 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getMember: systemInfo.getMember,
   getForumPosts: systemInfo.getForumPosts,
   rollLoot: systemInfo.rollLoot,
-
-  // Zoom methods
-  getZoomLevel: systemInfo.getZoomLevel,
-  onZoomUpdate: systemInfo.onZoomUpdate,
 }) 

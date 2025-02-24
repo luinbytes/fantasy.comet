@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useContext, useRef } from 'react'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { ChatBubbleLeftIcon, ArrowTopRightOnSquareIcon } from '@heroicons/react/24/outline'
 import { useToast } from '../context/ToastContext'
 import DOMPurify from 'dompurify'
 import Skeleton from './Skeleton'
 import { ForumContext } from '../contexts/ForumContext'
+import ForumWebView from './ForumWebView'
 
 function ForumPosts() {
   const [posts, setPosts] = useState([])
@@ -12,6 +13,9 @@ function ForumPosts() {
   const { addToast } = useToast()
   const { scrollRef } = useContext(ForumContext)
   const postRefs = useRef({})
+  const [isForumModalOpen, setIsForumModalOpen] = useState(false)
+  const [isForumFullView, setIsForumFullView] = useState(false)
+  const webviewRef = useRef(null)
 
   const domPurifyConfig = {
     ADD_TAGS: ['bb', 'spoiler', 'iframe', 'div'],
@@ -68,6 +72,10 @@ function ForumPosts() {
 
     let html = text
 
+    // Handle user mentions
+    html = html.replace(/\[USER=(\d+)\](.*?)\[\/USER\]/gi,
+      '<a href="https://constelia.ai/forums/index.php?members/$1/" class="text-primary hover:underline" onclick="return false;">$2</a>')
+
     // Handle quoted text with author
     html = html.replace(/\[quote=["']?(.*?)["']?\]([\s\S]*?)\[\/quote\]/gi,
       '<blockquote class="border-l-4 border-primary/30 pl-4 my-2"><div class="text-xs text-gray-500 mb-1">Originally posted by $1:</div><div class="italic text-gray-600">$2</div></blockquote>')
@@ -102,11 +110,11 @@ function ForumPosts() {
       
       // Links and media
       .replace(/\[url\s+unfurl="true"\](.*?)\[\/url\]/gi,
-        '<a href="$1" class="text-primary hover:underline block p-2 bg-light-200 dark:bg-dark-300 rounded" target="_blank" rel="noopener noreferrer">$1</a>')
+        '<a href="$1" class="text-primary hover:underline block p-2 bg-light-200 dark:bg-dark-300 rounded" onclick="return false;">$1</a>')
       .replace(/\[url=(.*?)\]([\s\S]*?)\[\/url\]/gi,
-        '<a href="$1" class="text-primary hover:underline" target="_blank" rel="noopener noreferrer">$2</a>')
+        '<a href="$1" class="text-primary hover:underline" onclick="return false;">$2</a>')
       .replace(/\[url\](.*?)\[\/url\]/gi,
-        '<a href="$1" class="text-primary hover:underline" target="_blank" rel="noopener noreferrer">$1</a>')
+        '<a href="$1" class="text-primary hover:underline" onclick="return false;">$1</a>')
       // Enhanced image support with alt text
       .replace(/\[img\s+alt="([^"]+)"\](.*?)\[\/img\]/gi,
         '<img src="$2" class="max-w-full rounded my-2" alt="$1" loading="lazy" />')
@@ -290,8 +298,52 @@ function ForumPosts() {
     }
   }
 
-  const openThread = (url) => {
-    window.electronAPI.openExternal(url)
+  useEffect(() => {
+    // Add click handler for all forum links
+    const handleLinkClick = (e) => {
+      const link = e.target.closest('a')
+      if (!link) return
+      
+      e.preventDefault()
+      const url = link.getAttribute('href')
+      if (url && url.includes('constelia.ai/forums')) {
+        openThread(url, e)
+      }
+    }
+
+    document.addEventListener('click', handleLinkClick)
+    return () => document.removeEventListener('click', handleLinkClick)
+  }, [])
+
+  const openThread = (url, e) => {
+    e.preventDefault() // Prevent default link behavior
+    const isShiftClick = e?.shiftKey
+    const config = window.electronAPI.getConfig()
+    
+    console.log('[FORUM] Opening thread:', { url, isShiftClick, openInApp: config.openForumInApp })
+    
+    if (config.openForumInApp) {
+      if (isShiftClick) {
+        // Open in modal when shift-clicking
+        setIsForumModalOpen(true)
+        setTimeout(() => {
+          if (webviewRef.current?.loadURL) {
+            webviewRef.current.loadURL(url)
+          }
+        }, 100)
+      } else {
+        // Open in full app view
+        setIsForumFullView(true)
+        setTimeout(() => {
+          if (webviewRef.current?.loadURL) {
+            webviewRef.current.loadURL(url)
+          }
+        }, 100)
+      }
+    } else {
+      // Open in default browser when setting is disabled
+      window.electronAPI.openExternal(url)
+    }
   }
 
   if (loading) {
@@ -308,69 +360,91 @@ function ForumPosts() {
   const groupedPosts = groupPosts(posts)
 
   return (
-    <div className="space-y-6">
-      <h2 className="text-xl font-semibold text-gray-800 dark:text-gray-200">
-        Recent Forum Activity
-      </h2>
+    <>
+      <div className="space-y-6">
+        <h2 className="text-xl font-semibold text-gray-800 dark:text-gray-200">
+          Recent Forum Activity
+        </h2>
 
-      <div className="space-y-8">
-        {groupedPosts.map((threadPosts, threadIndex) => (
-          <motion.div
-            key={threadPosts[0].thread_id}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.2, delay: threadIndex * 0.05 }}
-            className="space-y-3"
-          >
-            {/* Thread title */}
-            <div className="flex items-center justify-between">
-              <h3 className="font-medium text-gray-800 dark:text-gray-200">
-                {threadPosts[0].thread_title}
-              </h3>
-              <button
-                onClick={() => openThread(threadPosts[0].thread_url)}
-                className="p-1.5 hover:bg-light-200 dark:hover:bg-dark-300 rounded-lg transition-colors"
-              >
-                <ArrowTopRightOnSquareIcon className="w-5 h-5 text-gray-500 dark:text-gray-400" />
-              </button>
-            </div>
-
-            {/* Posts in thread */}
-            <div className="space-y-3 pl-4 border-l-2 border-primary/20">
-              {threadPosts.map((post, postIndex) => (
-                <motion.div
-                  key={post.post_id}
-                  ref={el => {
-                    console.log('Setting ref for post:', post.id)
-                    postRefs.current[post.id] = el
-                  }}
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ duration: 0.2, delay: postIndex * 0.05 }}
-                  className="bg-light-100 dark:bg-dark-200 rounded-xl p-4 shadow-md border border-light-300 dark:border-dark-100"
+        <div className="space-y-8">
+          {groupedPosts.map((threadPosts, threadIndex) => (
+            <motion.div
+              key={threadPosts[0].thread_id}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.2, delay: threadIndex * 0.05 }}
+              className="space-y-3"
+            >
+              {/* Thread title */}
+              <div className="flex items-center justify-between">
+                <h3 className="font-medium text-gray-800 dark:text-gray-200">
+                  {threadPosts[0].thread_title}
+                </h3>
+                <button
+                  onClick={(e) => openThread(threadPosts[0].thread_url, e)}
+                  className="p-1.5 hover:bg-light-200 dark:hover:bg-dark-300 rounded-lg transition-colors"
                 >
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="flex items-center space-x-2 text-sm text-gray-500 dark:text-gray-400">
-                      <ChatBubbleLeftIcon className="w-4 h-4" />
-                      <span>Posted by {post.username}</span>
-                      <span>•</span>
-                      <span>{post.formatted_date}</span>
-                    </div>
-                  </div>
+                  <ArrowTopRightOnSquareIcon className="w-5 h-5 text-gray-500 dark:text-gray-400" />
+                </button>
+              </div>
 
-                  <div className="prose prose-sm dark:prose-invert max-w-none">
-                    <div 
-                      className="text-gray-600 dark:text-gray-300"
-                      dangerouslySetInnerHTML={{ __html: parseBBCode(post.message) }}
-                    />
-                  </div>
-                </motion.div>
-              ))}
-            </div>
-          </motion.div>
-        ))}
+              {/* Posts in thread */}
+              <div className="space-y-3 pl-4 border-l-2 border-primary/20">
+                {threadPosts.map((post, postIndex) => (
+                  <motion.div
+                    key={post.post_id}
+                    ref={el => {
+                      console.log('Setting ref for post:', post.id)
+                      postRefs.current[post.id] = el
+                    }}
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ duration: 0.2, delay: postIndex * 0.05 }}
+                    className="bg-light-100 dark:bg-dark-200 rounded-xl p-4 shadow-md border border-light-300 dark:border-dark-100"
+                  >
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="flex items-center space-x-2 text-sm text-gray-500 dark:text-gray-400">
+                        <ChatBubbleLeftIcon className="w-4 h-4" />
+                        <span>Posted by {post.username}</span>
+                        <span>•</span>
+                        <span>{post.formatted_date}</span>
+                      </div>
+                    </div>
+
+                    <div className="prose prose-sm dark:prose-invert max-w-none">
+                      <div 
+                        className="text-gray-600 dark:text-gray-300"
+                        dangerouslySetInnerHTML={{ __html: parseBBCode(post.message) }}
+                      />
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
+            </motion.div>
+          ))}
+        </div>
       </div>
-    </div>
+
+      {/* Add Forum WebView components */}
+      <AnimatePresence>
+        {isForumModalOpen && (
+          <ForumWebView 
+            isOpen={isForumModalOpen} 
+            onClose={() => setIsForumModalOpen(false)}
+            ref={webviewRef}
+          />
+        )}
+      </AnimatePresence>
+
+      {isForumFullView && (
+        <ForumWebView 
+          isOpen={true}
+          onClose={() => setIsForumFullView(false)}
+          isFullView={true}
+          ref={webviewRef}
+        />
+      )}
+    </>
   )
 }
 

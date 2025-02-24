@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
-import { motion } from 'framer-motion'
-import { ChartBarIcon, UserGroupIcon, CogIcon, BellIcon, EnvelopeIcon, ArrowPathIcon, ChatBubbleLeftIcon } from '@heroicons/react/24/outline'
-import { XMarkIcon, MinusIcon, ArrowsPointingOutIcon } from '@heroicons/react/20/solid'
+import { motion, AnimatePresence } from 'framer-motion'
+import { ChartBarIcon, UserGroupIcon, CogIcon, BellIcon, EnvelopeIcon, ArrowPathIcon, ChatBubbleLeftIcon, XMarkIcon, MinusIcon, ArrowsPointingOutIcon, ArrowLeftIcon, ArrowRightIcon, GlobeAltIcon } from '@heroicons/react/24/outline'
+import { XMarkIcon as SolidXMarkIcon, MinusIcon as SolidMinusIcon, ArrowsPointingOutIcon as SolidArrowsPointingOutIcon } from '@heroicons/react/20/solid'
 import Settings from './components/Settings'
 import Software from './components/Software'
 import { ThemeProvider } from './context/ThemeContext'
@@ -11,6 +11,7 @@ import { ToastProvider, useToast } from './context/ToastContext'
 import NotificationDrawer from './components/NotificationDrawer'
 import Skeleton from './components/Skeleton'
 import ForumPosts from './components/ForumPosts'
+import ForumWebView from './components/ForumWebView'
 import { ForumContext } from './contexts/ForumContext'
 
 // Separate the main app content from the providers
@@ -44,6 +45,11 @@ function AppContent() {
   const velocityRef = useRef(0)
   const lastDeltaRef = useRef(0)
   const momentumRef = useRef(null)
+  const [isForumModalOpen, setIsForumModalOpen] = useState(false)
+  const [isForumFullView, setIsForumFullView] = useState(false)
+  const webviewRef = useRef(null)
+  const [canGoBack, setCanGoBack] = useState(false)
+  const [canGoForward, setCanGoForward] = useState(false)
 
   // Add smooth scroll function
   const smoothScroll = useCallback((element, target, duration = 300) => {
@@ -417,6 +423,19 @@ function AppContent() {
   }
 
   const renderContent = () => {
+    if (isForumFullView) {
+      return (
+        <ForumWebView 
+          isOpen={true} 
+          onClose={() => {
+            console.log('[FORUM] Closing full view')
+            setIsForumFullView(false)
+          }} 
+          isFullView={true} 
+        />
+      )
+    }
+
     switch(selectedTab) {
       case 'settings':
         return (
@@ -442,7 +461,14 @@ function AppContent() {
         )
       case 'Forum':
         return (
-          <ForumPosts />
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            className="h-full"
+          >
+            <ForumPosts />
+          </motion.div>
         )
       default:
         return (
@@ -656,6 +682,22 @@ function AppContent() {
     return () => clearTimeout(timer)
   }, [])
 
+  // Add this function near the top of the AppContent component
+  const handleForumLinkClick = (url, isShiftClick = false) => {
+    const config = window.electronAPI.getConfig()
+    
+    if (isShiftClick) {
+      setIsForumModalOpen(true)
+      return
+    }
+
+    if (config.openForumInApp) {
+      setIsForumFullView(true)
+    } else {
+      window.electronAPI.openExternal(url)
+    }
+  }
+
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -697,14 +739,14 @@ function AppContent() {
         <motion.div 
           initial={{ x: -100 }}
           animate={{ x: 0 }}
-          className="w-64 bg-light-100 dark:bg-dark-200 shadow-xl z-10 h-[calc(100vh-2rem)]"
+          className="w-64 bg-light-100 dark:bg-dark-200 shadow-xl z-10 h-[calc(100vh-2rem)] flex flex-col"
         >
           <div className="p-6">
             <h1 className="text-2xl font-bold text-primary">
               {tabTitles[selectedTab]}
             </h1>
           </div>
-          <nav className="mt-6 px-2">
+          <nav className="mt-6 px-2 flex-1">
             {[
               { name: 'Dashboard', icon: ChartBarIcon, id: 'dashboard' },
               { name: 'Software', icon: UserGroupIcon, id: 'Software' },
@@ -727,6 +769,19 @@ function AppContent() {
               </motion.button>
             ))}
           </nav>
+          
+          {/* Forum Button at bottom of sidebar */}
+          <div className="p-4 border-t border-light-300 dark:border-dark-100">
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={() => setIsForumFullView(true)}
+              className="w-full flex items-center justify-center px-4 py-3 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-colors duration-200"
+            >
+              <ChatBubbleLeftIcon className="w-5 h-5 mr-2" />
+              Open Forum
+            </motion.button>
+          </div>
         </motion.div>
 
         {/* Main content area */}
@@ -771,7 +826,7 @@ function AppContent() {
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
                   className="p-2 rounded-full hover:bg-light-200 dark:hover:bg-dark-100 transition-colors duration-200 relative"
-                  onClick={() => window.electronAPI.openExternal('https://constelia.ai/forums/index.php?direct-messages/')}
+                  onClick={(e) => handleForumLinkClick('https://constelia.ai/forums/index.php?direct-messages/', e.shiftKey)}
                 >
                   <EnvelopeIcon className="w-6 h-6 text-gray-600 dark:text-gray-400" />
                   <span className="absolute -top-1 -right-1 bg-primary text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
@@ -826,6 +881,16 @@ function AppContent() {
         onClose={() => setIsNotificationDrawerOpen(false)}
         alerts={alerts}
       />
+
+      {/* Forum Modal */}
+      <AnimatePresence>
+        {isForumModalOpen && (
+          <ForumWebView 
+            isOpen={isForumModalOpen} 
+            onClose={() => setIsForumModalOpen(false)}
+          />
+        )}
+      </AnimatePresence>
     </motion.div>
   )
 }

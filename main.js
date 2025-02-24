@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, Notification } = require('electron')
+const { app, BrowserWindow, ipcMain, Notification, session } = require('electron')
 const path = require('path')
 const fs = require('fs')
 const os = require('os')
@@ -10,13 +10,18 @@ const configDir = path.join(process.env.APPDATA || (process.platform === 'darwin
 
 const configPath = path.join(configDir, 'config.json')
 
+// Create session storage directory
+const sessionDir = path.join(configDir, 'session-storage')
+if (!fs.existsSync(sessionDir)) {
+  fs.mkdirSync(sessionDir, { recursive: true })
+}
+
 const defaultConfig = {
   apiKey: null,
   theme: 'dark',
   notifications: true,
   autoUpdate: false,
-  lastCheck: null,
-  zoomLevel: 1
+  lastCheck: null
 }
 
 function loadConfig() {
@@ -27,7 +32,6 @@ function loadConfig() {
     }
     return defaultConfig
   } catch (error) {
-    console.error('[ERROR] Failed to load config:', error)
     return defaultConfig
   }
 }
@@ -36,12 +40,20 @@ function loadConfig() {
 app.name = 'Fantasy.Comet'
 app.setAppUserModelId('Fantasy.Comet')
 
-console.log('[START] Electron app starting...')
-
 let win
 
 function createWindow() {
-  console.log('[WIN] Creating main window...')
+  // Set up persistent session for forum
+  const forumSession = session.fromPartition('persist:forum', {
+    cache: {
+      directory: path.join(sessionDir, 'Cache'),
+      maxSize: 50 * 1024 * 1024 // 50MB cache limit
+    }
+  })
+  
+  // Set custom user agent to avoid potential blocking
+  forumSession.setUserAgent('Fantasy.Comet/1.4.0 (Electron)')
+
   win = new BrowserWindow({
     width: 1200,
     height: 800,
@@ -50,7 +62,9 @@ function createWindow() {
       contextIsolation: true,
       preload: path.join(__dirname, 'preload.js'),
       sandbox: false,
-      webSecurity: true
+      webSecurity: true,
+      partition: 'persist:forum',
+      webviewTag: true
     },
     frame: false,
     backgroundColor: '#18191c'
@@ -58,46 +72,40 @@ function createWindow() {
 
   // Set initial zoom level from config
   const config = loadConfig()
-  if (config.zoomLevel) {
-    console.log('[ZOOM] Setting initial zoom level:', config.zoomLevel)
-    win.webContents.setZoomLevel(config.zoomLevel - 1)
-  }
 
-  console.log('[APP] Loading app content...')
   win.loadFile('dist/index.html')
 
-  win.webContents.on('did-finish-load', () => {
-    console.log('[OK] Window loaded successfully')
-  })
-
   win.webContents.on('did-fail-load', (_, errorCode, errorDescription) => {
-    console.error('[ERROR] Window failed to load:', errorCode, errorDescription)
+    console.error(`[ERROR] Window failed to load: ${errorCode} - ${errorDescription}`)
   })
 
-  // Set security policies for iframes
+  // Update CSP to allow forum content
   win.webContents.session.webRequest.onHeadersReceived((details, callback) => {
     callback({
       responseHeaders: {
         ...details.responseHeaders,
         'Content-Security-Policy': [
-          "default-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.youtube.com https://youtube.com https://*.youtube.com https://*.googlevideo.com https://*.google.com https://*.gstatic.com https://*.doubleclick.net;",
+          "default-src 'self' 'unsafe-inline' 'unsafe-eval' https://constelia.ai https://www.youtube.com https://youtube.com https://*.youtube.com https://*.googlevideo.com https://*.google.com https://*.gstatic.com https://*.doubleclick.net;",
           "connect-src 'self' https://constelia.ai https://api.github.com https://*.youtube.com https://*.googlevideo.com https://*.google.com https://*.gstatic.com https://*.doubleclick.net;",
-          "frame-src 'self' https://www.youtube.com https://youtube.com https://*.youtube.com https://youtube-nocookie.com;",
+          "frame-src 'self' https://constelia.ai https://www.youtube.com https://youtube.com https://*.youtube.com https://youtube-nocookie.com;",
           "img-src 'self' https://constelia.ai data: https: blob:;",
           "media-src 'self' https://www.youtube.com https://youtube.com https://*.youtube.com https://*.googlevideo.com blob:;",
-          "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.youtube.com https://*.youtube.com https://*.google.com https://*.gstatic.com https://*.doubleclick.net;",
-          "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;",
-          "font-src 'self' https://fonts.gstatic.com;",
-          "child-src 'self' https://www.youtube.com https://youtube.com https://*.youtube.com blob:;"
+          "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://constelia.ai https://www.youtube.com https://*.youtube.com https://*.google.com https://*.gstatic.com https://*.doubleclick.net;",
+          "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://constelia.ai;",
+          "font-src 'self' https://fonts.gstatic.com https://constelia.ai;",
+          "child-src 'self' https://constelia.ai https://www.youtube.com https://youtube.com https://*.youtube.com blob:;"
         ].join('; ')
       }
     })
   })
 
-  // Enable remote content
+  // Add permission handling for the forum
   win.webContents.session.setPermissionRequestHandler((webContents, permission, callback) => {
     const url = webContents.getURL()
-    if (permission === 'media' || url.includes('youtube.com') || url.includes('youtube-nocookie.com')) {
+    if (permission === 'media' || 
+        url.includes('youtube.com') || 
+        url.includes('youtube-nocookie.com') ||
+        url.includes('constelia.ai')) {
       callback(true)
     } else {
       callback(false)
@@ -106,11 +114,9 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
-  console.log('[OK] App is ready')
   createWindow()
 
   app.on('activate', () => {
-    console.log('[APP] Activating app...')
     if (BrowserWindow.getAllWindows().length === 0) {
       createWindow()
     }
@@ -119,34 +125,26 @@ app.whenReady().then(() => {
 
 // Handle window control events
 ipcMain.on('window-control', (_, action) => {
-  console.log('[CONTROL] Window action received:', action)
-  if (!win) {
-    console.error('[ERROR] Window not found')
-    return
-  }
+  if (!win) return
 
   try {
     switch (action) {
       case 'minimize':
         win.minimize()
-        console.log('[OK] Window minimized')
         break
       case 'maximize':
         if (win.isMaximized()) {
           win.unmaximize()
-          console.log('[OK] Window unmaximized')
         } else {
           win.maximize()
-          console.log('[OK] Window maximized')
         }
         break
       case 'close':
-        console.log('[APP] Closing window...')
         win.close()
         break
     }
   } catch (error) {
-    console.error('[ERROR] Window control error:', error)
+    console.error(`[ERROR] Window control error: ${error.message}`)
   }
 })
 
@@ -161,11 +159,9 @@ ipcMain.on('show-notification', (_, { title, body }) => {
         silent: false,
         appName: app.name
       }).show()
-    } else {
-      console.warn('[WARN] Notifications not supported on this system')
     }
   } catch (error) {
-    console.error('[ERROR] Failed to show notification:', error)
+    console.error(`[ERROR] Failed to show notification: ${error.message}`)
   }
 })
 
@@ -174,27 +170,8 @@ ipcMain.handle('get-app-version', () => {
   return app.getVersion()
 })
 
-// Add zoom level handler
-ipcMain.on('set-zoom', (event, direction) => {
-  if (direction === 'in') {
-    win.webContents.zoomIn()
-  } else if (direction === 'out') {
-    win.webContents.zoomOut()
-  }
-  // Send the new zoom level back to the renderer
-  const zoomLevel = win.webContents.getZoomLevel()
-  event.reply('zoom-updated', zoomLevel)
-})
-
-// Add handler to get current zoom level
-ipcMain.handle('get-zoom-level', () => {
-  return win.webContents.getZoomLevel()
-})
-
 app.on('window-all-closed', () => {
-  console.log('[APP] All windows closed')
   if (process.platform !== 'darwin') {
-    console.log('[APP] Quitting app...')
     app.quit()
   }
 }) 
