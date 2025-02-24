@@ -12,7 +12,7 @@ A sleek and modern Constelia companion app built with Electron, React, and Tailw
 - 🌙 Beautiful dark theme with smooth transitions
 - 🎭 Fluid animations using Framer Motion
 - 📊 Interactive activity tracking
-- 🎲 Jupiter's Abundance integration
+- 🎲 Abundance of Jupiter integration
 - 🔔 Real-time notifications
 - 🔄 Auto-refresh system
 - 🔃 GitHub release updates
@@ -20,6 +20,11 @@ A sleek and modern Constelia companion app built with Electron, React, and Tailw
 - ⚡ Fast and responsive
 - 🔒 Secure API handling
 - ⚙️ Customizable settings
+- 🌐 Integrated forum viewer
+- 💨 Quick-view forum popups
+- 🔗 Configurable link handling
+- 📱 Persistent forum sessions
+- 🧭 Complete navigation controls
 
 ## 📦 Releases & Updates
 
