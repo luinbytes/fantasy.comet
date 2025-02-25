@@ -10,7 +10,17 @@ export function ThemeProvider({ children }) {
       return config.theme || 'dark'
     } catch (error) {
       console.error('Failed to get theme from config:', error)
-      return 'dark' // Default to dark theme if config fails
+      return 'dark'
+    }
+  })
+
+  const [colorPalette, setColorPalette] = useState(() => {
+    try {
+      const config = window.electronAPI.getConfig()
+      return config.colorPalette || 'default'
+    } catch (error) {
+      console.error('Failed to get color palette from config:', error)
+      return 'default'
     }
   })
 
@@ -22,6 +32,15 @@ export function ThemeProvider({ children }) {
       root.classList.remove('dark')
     }
   }, [theme])
+
+  useEffect(() => {
+    const root = document.documentElement
+    
+    root.classList.remove('palette-default', 'palette-blue', 'palette-green', 'palette-purple', 'palette-orange')
+    
+    root.classList.add(`palette-${colorPalette}`)
+    
+  }, [colorPalette])
 
   const toggleTheme = () => {
     setTheme(prev => {
@@ -35,8 +54,17 @@ export function ThemeProvider({ children }) {
     })
   }
 
+  const changeColorPalette = (palette) => {
+    setColorPalette(palette)
+    try {
+      window.electronAPI.saveConfig({ colorPalette: palette })
+    } catch (error) {
+      console.error('Failed to save color palette to config:', error)
+    }
+  }
+
   return (
-    <ThemeContext.Provider value={{ theme, toggleTheme }}>
+    <ThemeContext.Provider value={{ theme, toggleTheme, colorPalette, changeColorPalette }}>
       {children}
     </ThemeContext.Provider>
   )

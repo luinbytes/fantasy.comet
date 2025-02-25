@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { motion } from 'framer-motion'
 import { 
   MoonIcon, 
@@ -6,13 +6,16 @@ import {
   ArrowPathIcon,
   FolderIcon,
   MagnifyingGlassIcon,
-  GlobeAltIcon
+  GlobeAltIcon,
+  KeyIcon,
+  Bars3Icon,
+  SwatchIcon
 } from '@heroicons/react/24/outline'
 import { useTheme } from '../context/ThemeContext'
 import { useToast } from '../context/ToastContext'
 
 function Settings() {
-  const { theme, toggleTheme } = useTheme()
+  const { theme, toggleTheme, colorPalette, changeColorPalette } = useTheme()
   const { addToast } = useToast()
   const [notifications, setNotifications] = useState(() => {
     const config = window.electronAPI.getConfig()
@@ -22,8 +25,56 @@ function Settings() {
     const config = window.electronAPI.getConfig()
     return config.autoUpdate
   })
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    const config = window.electronAPI.getConfig()
+    return config.sidebarCollapsed || false
+  })
+  const [apiKey, setApiKey] = useState(() => {
+    return window.electronAPI.getApiKey() || ''
+  })
   const [checking, setChecking] = useState(false)
+  const [isValidatingApiKey, setIsValidatingApiKey] = useState(false)
+  const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 })
+  const [isHovering, setIsHovering] = useState(false)
+  const apiKeyInputRef = useRef(null)
   const isDarkMode = theme === 'dark'
+
+  // Color palette options
+  const colorPalettes = [
+    { id: 'default', name: 'Pink (Default)', color: '#f0a5c0' },
+    { id: 'blue', name: 'Blue', color: '#60a5fa' },
+    { id: 'green', name: 'Green', color: '#34d399' },
+    { id: 'purple', name: 'Purple', color: '#a78bfa' },
+    { id: 'orange', name: 'Orange', color: '#fb923c' }
+  ]
+
+  // Function to handle mouse movement over the input
+  const handleMouseMove = (e) => {
+    if (!apiKeyInputRef.current) return
+    
+    const rect = apiKeyInputRef.current.getBoundingClientRect()
+    const x = e.clientX - rect.left
+    setMousePosition({ x })
+  }
+
+  // Function to mask the API key with a spotlight effect
+  const getMaskedApiKey = () => {
+    if (!isHovering) return '•'.repeat(apiKey.length)
+    
+    const spotlightWidth = 40 // Width of the spotlight in pixels
+    const charWidth = 8 // Approximate width of a character in pixels
+    
+    return apiKey.split('').map((char, index) => {
+      const charPosition = index * charWidth
+      const distance = Math.abs(charPosition - mousePosition.x)
+      
+      // Show character if it's within the spotlight radius
+      if (distance < spotlightWidth / 2) {
+        return char
+      }
+      return '•'
+    }).join('')
+  }
 
   const handleNotificationsChange = (enabled) => {
     setNotifications(enabled)
@@ -44,6 +95,21 @@ function Settings() {
     } else {
       addToast('Auto updates disabled - use Check Now button to check manually', 'info')
     }
+  }
+
+  const handleSidebarCollapsedChange = (collapsed) => {
+    setSidebarCollapsed(collapsed)
+    window.electronAPI.saveConfig({ sidebarCollapsed: collapsed })
+    addToast(
+      `Sidebar will be ${collapsed ? 'collapsed' : 'expanded'} on next startup`,
+      'info'
+    )
+  }
+
+  const handleColorPaletteChange = (paletteId) => {
+    changeColorPalette(paletteId)
+    const paletteName = colorPalettes.find(p => p.id === paletteId)?.name || paletteId
+    addToast(`Color palette changed to ${paletteName}`, 'info')
   }
 
   const handleOpenConfigFolder = () => {
@@ -103,18 +169,112 @@ function Settings() {
     }
   }
 
+  const validateApiKey = (key) => {
+    // Basic validation - check if it's a non-empty string with reasonable length
+    if (!key || typeof key !== 'string' || key.trim().length < 8) {
+      return false
+    }
+    
+    // Check for common API key formats (adjust based on actual format)
+    // This is a simple example - modify based on the actual API key format
+    const validFormat = /^[A-Za-z0-9_-]{8,}$/
+    return validFormat.test(key.trim())
+  }
+
+  const handleSaveApiKey = async () => {
+    if (!apiKey.trim()) {
+      addToast('Please enter an API key', 'error')
+      return
+    }
+
+    // Basic format validation
+    if (!validateApiKey(apiKey)) {
+      addToast('Invalid API key format', 'error')
+      return
+    }
+
+    setIsValidatingApiKey(true)
+    
+    try {
+      // Save the API key
+      if (window.electronAPI.saveApiKey(apiKey.trim())) {
+        // Try to make a simple API call to validate the key
+        try {
+          await window.electronAPI.getMember('username')
+          addToast('API key validated and saved successfully', 'success')
+        } catch (error) {
+          // If the API call fails, the key is likely invalid
+          window.electronAPI.saveApiKey('') // Clear the invalid key
+          setApiKey('')
+          addToast('Invalid API key. Please check and try again.', 'error')
+        }
+      } else {
+        addToast('Failed to save API key', 'error')
+      }
+    } catch (error) {
+      addToast('An error occurred while saving the API key', 'error')
+    } finally {
+      setIsValidatingApiKey(false)
+    }
+  }
+
   return (
     <div className="space-y-6">
-      {/* General Settings */}
+      {/* API Key Settings */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         className="bg-light-100 dark:bg-dark-200 p-6 rounded-xl shadow-md"
       >
         <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-200 mb-4">
-          General Settings
+          API Key Configuration
         </h3>
         <div className="space-y-4">
+          <div className="flex items-center space-x-2 mb-2">
+            <KeyIcon className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+            <span className="text-gray-600 dark:text-gray-400">Constelia API Key</span>
+          </div>
+          <div className="flex flex-col space-y-2">
+            <div className="relative">
+              <input
+                ref={apiKeyInputRef}
+                type="text"
+                value={getMaskedApiKey()}
+                onChange={(e) => setApiKey(e.target.value)}
+                onMouseMove={handleMouseMove}
+                onMouseEnter={() => setIsHovering(true)}
+                onMouseLeave={() => setIsHovering(false)}
+                placeholder="Enter your Constelia API key"
+                className="w-full px-4 py-2 bg-light-200 dark:bg-dark-300 border border-light-300 dark:border-dark-100 rounded-lg text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-primary"
+                disabled={isValidatingApiKey}
+              />
+            </div>
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              Your API key is required to access Constelia services. You can find your key in your Constelia account settings.
+            </p>
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={handleSaveApiKey}
+              className="self-end px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={isValidatingApiKey}
+            >
+              {isValidatingApiKey ? 'Validating...' : 'Save API Key'}
+            </motion.button>
+          </div>
+        </div>
+      </motion.div>
+
+      {/* Theme Settings */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="bg-light-100 dark:bg-dark-200 p-6 rounded-xl shadow-md"
+      >
+        <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-200 mb-4">
+          Theme
+        </h3>
+        <div className="space-y-6">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2">
               <MoonIcon className="w-5 h-5 text-gray-600 dark:text-gray-400" />
@@ -137,42 +297,53 @@ function Settings() {
             </div>
           </div>
 
-          <div className="flex items-center justify-between">
-            <div className="flex flex-col">
-              <div className="flex items-center space-x-2">
-                <GlobeAltIcon className="w-5 h-5 text-gray-600 dark:text-gray-400" />
-                <span className="text-gray-600 dark:text-gray-400">Open Forum Links In-App</span>
-              </div>
-              <span className="text-xs text-gray-500 dark:text-gray-400 mt-1 ml-7">
-                Shift + Click any forum link to open in a popup window
-              </span>
+          <div className="space-y-3">
+            <div className="flex items-center space-x-2">
+              <SwatchIcon className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+              <span className="text-gray-600 dark:text-gray-400">Color Palette</span>
             </div>
-            <div
-              role="button"
-              tabIndex={0}
-              onClick={() => {
-                const newValue = !window.electronAPI.getConfig().openForumInApp
-                window.electronAPI.saveConfig({ openForumInApp: newValue })
-                addToast(
-                  `Forum links will ${newValue ? 'open in app' : 'open in external browser'}`,
-                  'info'
-                )
-              }}
-              onKeyDown={(e) => e.key === 'Enter' && window.electronAPI.saveConfig({ 
-                openForumInApp: !window.electronAPI.getConfig().openForumInApp 
-              })}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none cursor-pointer ${
-                window.electronAPI.getConfig().openForumInApp ? 'bg-primary' : 'bg-gray-400'
-              }`}
-            >
-              <span
-                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-200 ease-in-out ${
-                  window.electronAPI.getConfig().openForumInApp ? 'translate-x-6' : 'translate-x-1'
-                }`}
-              />
+            <div className="grid grid-cols-5 gap-3">
+              {colorPalettes.map((palette) => (
+                <div 
+                  key={palette.id}
+                  onClick={() => handleColorPaletteChange(palette.id)}
+                  className={`flex flex-col items-center cursor-pointer transition-all duration-200 ${
+                    colorPalette === palette.id 
+                      ? 'transform scale-105' 
+                      : 'opacity-70 hover:opacity-100'
+                  }`}
+                >
+                  <div 
+                    className={`w-10 h-10 rounded-full mb-1 border-2 ${
+                      colorPalette === palette.id 
+                        ? 'border-gray-800 dark:border-white' 
+                        : 'border-transparent'
+                    }`}
+                    style={{ backgroundColor: palette.color }}
+                  />
+                  <span className="text-xs text-gray-600 dark:text-gray-400 text-center">
+                    {palette.id === 'default' ? 'Default' : palette.name.split(' ')[0]}
+                  </span>
+                </div>
+              ))}
             </div>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+              Select a color palette to customize the app's appearance.
+            </p>
           </div>
+        </div>
+      </motion.div>
 
+      {/* General Settings */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="bg-light-100 dark:bg-dark-200 p-6 rounded-xl shadow-md"
+      >
+        <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-200 mb-4">
+          General Settings
+        </h3>
+        <div className="space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2">
               <BellIcon className="w-5 h-5 text-gray-600 dark:text-gray-400" />
@@ -219,11 +390,55 @@ function Settings() {
 
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2">
+              <Bars3Icon className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+              <span className="text-gray-600 dark:text-gray-400">Sidebar Collapsed</span>
+            </div>
+            <div
+              role="button"
+              tabIndex={0}
+              onClick={() => handleSidebarCollapsedChange(!sidebarCollapsed)}
+              onKeyDown={(e) => e.key === 'Enter' && handleSidebarCollapsedChange(!sidebarCollapsed)}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none cursor-pointer ${
+                sidebarCollapsed ? 'bg-primary' : 'bg-gray-400'
+              }`}
+            >
+              <span
+                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-200 ease-in-out ${
+                  sidebarCollapsed ? 'translate-x-6' : 'translate-x-1'
+                }`}
+              />
+            </div>
+          </div>
+        </div>
+      </motion.div>
+
+      {/* Keybinds Card */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="bg-light-100 dark:bg-dark-200 p-6 rounded-xl shadow-md"
+      >
+        <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-200 mb-4">
+          Keyboard Shortcuts
+        </h3>
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-2">
               <MagnifyingGlassIcon className="w-5 h-5 text-gray-600 dark:text-gray-400" />
               <span className="text-gray-600 dark:text-gray-400">Window Zoom</span>
             </div>
             <div className="text-sm text-gray-500 dark:text-gray-400">
               Use Ctrl - or Ctrl Shift + to adjust
+            </div>
+          </div>
+          
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <Bars3Icon className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+              <span className="text-gray-600 dark:text-gray-400">Toggle Sidebar</span>
+            </div>
+            <div className="text-sm text-gray-500 dark:text-gray-400">
+              Ctrl + S
             </div>
           </div>
         </div>
@@ -266,6 +481,32 @@ function Settings() {
             >
               {checking ? 'Checking...' : 'Check Now'}
             </button>
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <FolderIcon className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+              <span className="text-gray-600 dark:text-gray-400">Clean Config</span>
+            </div>
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => {
+                const result = window.electronAPI.cleanConfig();
+                if (result.success) {
+                  if (result.removedKeys.length > 0) {
+                    addToast(`Removed ${result.removedKeys.length} deprecated settings`, 'success');
+                  } else {
+                    addToast('Config file is already clean', 'info');
+                  }
+                } else {
+                  addToast(`Failed to clean config: ${result.error}`, 'error');
+                }
+              }}
+              className="px-3 py-1.5 rounded-lg bg-light-200 dark:bg-dark-300 text-gray-600 dark:text-gray-400 hover:bg-light-300 dark:hover:bg-dark-100"
+            >
+              Clean Now
+            </motion.button>
           </div>
 
           <div className="pt-4 border-t border-light-300 dark:border-dark-100">

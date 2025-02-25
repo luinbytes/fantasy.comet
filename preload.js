@@ -18,11 +18,49 @@ const configPath = path.join(configDir, 'config.json')
 const defaultConfig = {
   apiKey: null,
   theme: 'dark',
+  colorPalette: 'default',
   notifications: true,
   autoUpdate: false,
   lastCheck: null,
-  openForumInApp: true
+  sidebarCollapsed: false
 }
+
+// Clean config file on startup to remove deprecated settings
+const cleanConfigFile = () => {
+  try {
+    if (fs.existsSync(configPath)) {
+      const userConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'))
+      
+      // Filter out any keys that aren't in defaultConfig
+      const filteredConfig = {}
+      let configChanged = false
+      
+      // Only keep keys that exist in defaultConfig
+      Object.keys(defaultConfig).forEach(key => {
+        if (key in userConfig) {
+          filteredConfig[key] = userConfig[key]
+        } else {
+          filteredConfig[key] = defaultConfig[key]
+        }
+      })
+      
+      // Check if any keys were removed
+      const removedKeys = Object.keys(userConfig).filter(key => !(key in defaultConfig))
+      configChanged = removedKeys.length > 0
+      
+      // If config had unused keys, save the cleaned version
+      if (configChanged) {
+        fs.writeFileSync(configPath, JSON.stringify(filteredConfig, null, 2))
+        console.log(`[CONFIG] Removed deprecated settings: ${removedKeys.join(', ')}`)
+      }
+    }
+  } catch (error) {
+    console.error(`[CONFIG] Error cleaning config file: ${error.message}`)
+  }
+}
+
+// Clean config file on startup
+cleanConfigFile()
 
 const systemInfo = {
   windowControl: (action) => {
@@ -58,11 +96,25 @@ const systemInfo = {
   getConfig: () => {
     try {
       if (fs.existsSync(configPath)) {
-        const config = { ...defaultConfig, ...JSON.parse(fs.readFileSync(configPath, 'utf8')) }
-        return config
+        const userConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'))
+        
+        // Filter out any keys that aren't in defaultConfig
+        const filteredConfig = {}
+        
+        // Only keep keys that exist in defaultConfig
+        Object.keys(defaultConfig).forEach(key => {
+          if (key in userConfig) {
+            filteredConfig[key] = userConfig[key]
+          } else {
+            filteredConfig[key] = defaultConfig[key]
+          }
+        })
+        
+        return filteredConfig
       }
       return defaultConfig
     } catch (error) {
+      console.error(`[CONFIG] Error reading config: ${error.message}`)
       return defaultConfig
     }
   },
@@ -70,10 +122,21 @@ const systemInfo = {
   saveConfig: (updates) => {
     try {
       const currentConfig = systemInfo.getConfig()
-      const newConfig = { ...currentConfig, ...updates }
+      const newConfig = { ...currentConfig }
+      
+      // Only update keys that exist in defaultConfig
+      Object.keys(updates).forEach(key => {
+        if (key in defaultConfig) {
+          newConfig[key] = updates[key]
+        } else {
+          console.log(`[CONFIG] Ignoring unknown config key: ${key}`)
+        }
+      })
+      
       fs.writeFileSync(configPath, JSON.stringify(newConfig, null, 2))
       return true
     } catch (error) {
+      console.error(`[CONFIG] Error saving config: ${error.message}`)
       return false
     }
   },
@@ -292,6 +355,46 @@ const systemInfo = {
         throw error
       }
     }
+  },
+
+  cleanConfig: () => {
+    try {
+      if (fs.existsSync(configPath)) {
+        const userConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'))
+        
+        // Filter out any keys that aren't in defaultConfig
+        const filteredConfig = {}
+        
+        // Only keep keys that exist in defaultConfig
+        Object.keys(defaultConfig).forEach(key => {
+          if (key in userConfig) {
+            filteredConfig[key] = userConfig[key]
+          } else {
+            filteredConfig[key] = defaultConfig[key]
+          }
+        })
+        
+        // Check if any keys were removed
+        const removedKeys = Object.keys(userConfig).filter(key => !(key in defaultConfig))
+        const configChanged = removedKeys.length > 0
+        
+        // If config had unused keys, save the cleaned version
+        if (configChanged) {
+          fs.writeFileSync(configPath, JSON.stringify(filteredConfig, null, 2))
+          console.log(`[CONFIG] Removed deprecated settings: ${removedKeys.join(', ')}`)
+          return {
+            success: true,
+            removedKeys: removedKeys
+          }
+        }
+        
+        return { success: true, removedKeys: [] }
+      }
+      return { success: true, removedKeys: [] }
+    } catch (error) {
+      console.error(`[CONFIG] Error cleaning config file: ${error.message}`)
+      return { success: false, error: error.message }
+    }
   }
 }
 
@@ -301,6 +404,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   windowControl: systemInfo.windowControl,
   getConfig: systemInfo.getConfig,
   saveConfig: systemInfo.saveConfig,
+  cleanConfig: systemInfo.cleanConfig,
   getApiKey: systemInfo.getApiKey,
   saveApiKey: systemInfo.saveApiKey,
   openExternal: systemInfo.openExternal,

@@ -1,15 +1,17 @@
 # 🌟 Fantasy Comet
 
-A sleek and modern Constelia companion app built with Electron, React, and TailwindCSS, featuring a beautiful dark theme and smooth animations.
+A sleek and modern Constelia companion app built with Electron, React, and TailwindCSS, featuring beautiful themes and smooth animations.
 
 ![License](https://img.shields.io/badge/license-ISC-blue.svg)
 ![React](https://img.shields.io/badge/react-%2320232a.svg?style=flat&logo=react&logoColor=%2361DAFB)
 ![Electron.js](https://img.shields.io/badge/Electron-191970?style=flat&logo=Electron&logoColor=white)
 ![TailwindCSS](https://img.shields.io/badge/tailwindcss-%2338B2AC.svg?style=flat&logo=tailwind-css&logoColor=white)
+![Version](https://img.shields.io/badge/version-1.5.0-green.svg)
 
 ## ✨ Features
 
-- 🌙 Beautiful dark theme with smooth transitions
+- 🎨 Multiple color palettes (Pink, Blue, Green, Purple, Orange)
+- 🌙 Beautiful dark and light themes with smooth transitions
 - 🎭 Fluid animations using Framer Motion
 - 📊 Interactive activity tracking
 - 🎲 Abundance of Jupiter integration
@@ -18,13 +20,14 @@ A sleek and modern Constelia companion app built with Electron, React, and Tailw
 - 🔃 GitHub release updates
 - 🎨 Modern UI components
 - ⚡ Fast and responsive
-- 🔒 Secure API handling
+- 🔒 Secure API key management with spotlight effect
 - ⚙️ Customizable settings
-- 🌐 Integrated forum viewer
+- 🌐 Integrated forum viewer with full app experience
 - 💨 Quick-view forum popups
 - 🔗 Configurable link handling
 - 📱 Persistent forum sessions
 - 🧭 Complete navigation controls
+- 🔐 Enhanced API error handling
 
 ## 📦 Releases & Updates
 
@@ -92,12 +95,15 @@ fantasy.comet/
 │   ├── components/
 │   │   ├── ActivityChart.jsx
 │   │   ├── ApiKeySetup.jsx
+│   │   ├── ForumPosts.jsx
+│   │   ├── ForumWebView.jsx
 │   │   ├── JupiterLoot.jsx
 │   │   ├── MemberInfo.jsx
 │   │   ├── NotificationDrawer.jsx
 │   │   ├── Settings.jsx
+│   │   ├── Skeleton.jsx
 │   │   ├── Toast.jsx
-│   │   └── Users.jsx
+│   │   └── ToastContainer.jsx
 │   ├── context/
 │   │   ├── ThemeContext.jsx
 │   │   └── ToastContext.jsx
@@ -106,6 +112,7 @@ fantasy.comet/
 │   └── index.css
 ├── main.js
 ├── preload.js
+├── forum-preload.js
 ├── vite.config.js
 └── tailwind.config.js
 ```

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ChartBarIcon, UserGroupIcon, CogIcon, BellIcon, EnvelopeIcon, ArrowPathIcon, ChatBubbleLeftIcon, XMarkIcon, MinusIcon, ArrowsPointingOutIcon, ArrowLeftIcon, ArrowRightIcon, GlobeAltIcon } from '@heroicons/react/24/outline'
+import { ChartBarIcon, UserGroupIcon, CogIcon, BellIcon, EnvelopeIcon, ArrowPathIcon, ChatBubbleLeftIcon, XMarkIcon, MinusIcon, ArrowsPointingOutIcon, ArrowLeftIcon, ArrowRightIcon, GlobeAltIcon, Bars3Icon } from '@heroicons/react/24/outline'
 import { XMarkIcon as SolidXMarkIcon, MinusIcon as SolidMinusIcon, ArrowsPointingOutIcon as SolidArrowsPointingOutIcon } from '@heroicons/react/20/solid'
 import Settings from './components/Settings'
 import Software from './components/Software'
@@ -13,6 +13,7 @@ import Skeleton from './components/Skeleton'
 import ForumPosts from './components/ForumPosts'
 import ForumWebView from './components/ForumWebView'
 import { ForumContext } from './contexts/ForumContext'
+import ApiKeySetup from './components/ApiKeySetup'
 
 // Separate the main app content from the providers
 function AppContent() {
@@ -50,6 +51,45 @@ function AppContent() {
   const webviewRef = useRef(null)
   const [canGoBack, setCanGoBack] = useState(false)
   const [canGoForward, setCanGoForward] = useState(false)
+  const [hasApiKey, setHasApiKey] = useState(false)
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
+    try {
+      const config = window.electronAPI.getConfig()
+      return config.sidebarCollapsed || false
+    } catch (error) {
+      console.error('Failed to get sidebar state from config:', error)
+      return false
+    }
+  })
+
+  // Function to toggle sidebar
+  const toggleSidebar = useCallback(() => {
+    setIsSidebarCollapsed(prev => {
+      const newState = !prev
+      // Save to config
+      try {
+        window.electronAPI.saveConfig({ sidebarCollapsed: newState })
+      } catch (error) {
+        console.error('Failed to save sidebar state to config:', error)
+      }
+      return newState
+    });
+    addToast(`Sidebar ${isSidebarCollapsed ? 'expanded' : 'collapsed'}`, 'info');
+  }, [isSidebarCollapsed, addToast]);
+
+  // Add keyboard shortcut for sidebar toggle
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      // Check for Ctrl+S
+      if (e.ctrlKey && e.key === 's') {
+        e.preventDefault(); // Prevent default save action
+        toggleSidebar();
+      }
+    };
+    
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [toggleSidebar]);
 
   // Add smooth scroll function
   const smoothScroll = useCallback((element, target, duration = 300) => {
@@ -275,7 +315,29 @@ function AppContent() {
     // That's it - no notifications or data fetching
   }
 
-  // Only fetch software list during app refresh
+  // Handle API key being set
+  const handleApiKeySet = (key) => {
+    setHasApiKey(true)
+    // Trigger data fetch after API key is set
+    fetchAllData()
+  }
+
+  // Handle API errors related to missing or invalid API key
+  const handleApiError = (error) => {
+    console.error('[API ERROR]', error.message ? error.message : error)
+    
+    if (error.message === 'API key not found' || error.message.includes('API key not found')) {
+      setHasApiKey(false)
+      addToast('API key is missing. Please enter your API key.', 'error')
+    } else if (error.message.includes('Invalid API key') || error.message.includes('Authentication failed')) {
+      setHasApiKey(false)
+      // Clear the invalid API key securely
+      window.electronAPI.saveApiKey('')
+      addToast('Invalid API key. Please check and re-enter your API key.', 'error')
+    }
+  }
+
+  // Modify fetchAllData to handle API key errors
   const fetchAllData = async () => {
     try {
       setIsLoading(true)
@@ -285,28 +347,52 @@ function AppContent() {
       setSystemInfo(systemInfo)
 
       // Fetch member data
-      const memberData = await window.electronAPI.getMember()
+      try {
+        const memberData = await window.electronAPI.getMember()
+        setMemberInfo(memberData)
+        
+        if (memberData.rolls) {
+          setRecentRolls(memberData.rolls)
+          setCanRoll(memberData.can_roll)
+          setLastRollTime(memberData.last_roll_time)
+          
+          if (memberData.cooldown_end) {
+            setCooldownEndTime(memberData.cooldown_end * 1000)
+          }
+        }
+      } catch (error) {
+        console.error('[ERROR] Member data fetch error:', error)
+        handleApiError(error)
+        return // Stop further processing if API key is invalid
+      }
       
       // Fetch software data if not already loaded
       if (!selectedSoftwareDetails) {
-        setSoftware(Object.values(softwareData))
+        try {
+          // Fetch software data before using it
+          const softwareData = await window.electronAPI.getAllSoftware()
+          if (softwareData) {
+            setSoftware(Object.values(softwareData))
+          }
+        } catch (error) {
+          console.error('[ERROR] Software data fetch error:', error)
+          handleApiError(error)
+        }
       }
-      setMemberInfo(memberData)
       
-      if (memberData.rolls) {
-        setRecentRolls(memberData.rolls)
-      }
-
+      // Update loading state and initial load flag
+      setIsLoading(false)
+      setIsInitialLoad(false)
+      setNextRefreshTime(Date.now() + 300000) // 5 minutes
+      
       // Show welcome toast only on initial load, not during refreshes
       if (isInitialLoad) {
-        addToast(`Welcome back, ${memberData.username || systemInfo?.username || 'User'}!`, 'success')
-        setIsInitialLoad(false)
+        addToast(`Welcome back, ${memberInfo?.username || systemInfo?.username || 'User'}!`, 'success')
       }
     } catch (error) {
-      console.error('[ERROR] Initial data fetch failed:', error)
-      addToast('Failed to load some data', 'error')
-    } finally {
+      console.error('[ERROR] Data fetch error:', error)
       setIsLoading(false)
+      addToast('Failed to load data. Please try again.', 'error')
     }
   }
 
@@ -686,214 +772,334 @@ function AppContent() {
 
   // Add this function near the top of the AppContent component
   const handleForumLinkClick = (url, isShiftClick = false) => {
-    const config = window.electronAPI.getConfig()
-    
     if (isShiftClick) {
       setIsForumModalOpen(true)
       return
     }
 
-    if (config.openForumInApp) {
-      setIsForumFullView(true)
-    } else {
-      window.electronAPI.openExternal(url)
-    }
+    // Always open in the app now
+    setIsForumFullView(true)
   }
 
+  // Check if API key is set
+  useEffect(() => {
+    const apiKey = window.electronAPI.getApiKey()
+    setHasApiKey(!!apiKey)
+  }, [])
+
+  // Add API error listener
+  useEffect(() => {
+    // Set up event listener for API errors
+    const handleApiError = (event, error) => {
+      console.error('[API ERROR]', error)
+      
+      if (error.includes('API key not found') || error.includes('Invalid API key')) {
+        setHasApiKey(false)
+        addToast('API key issue detected. Please re-enter your API key.', 'error')
+      }
+    }
+    
+    // Register the event listener if electronAPI is available
+    if (window.electronAPI && window.electronAPI.onApiError) {
+      window.electronAPI.onApiError(handleApiError)
+    }
+    
+    // Clean up the listener when component unmounts
+    return () => {
+      if (window.electronAPI && window.electronAPI.removeApiErrorListener) {
+        window.electronAPI.removeApiErrorListener(handleApiError)
+      }
+    }
+  }, [addToast])
+
+  // Render the main app content
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      transition={{ duration: 0.3 }}
-      className="h-full bg-light-200 dark:bg-dark-400"
-    >
-      {/* Fixed Title Bar */}
-      <div className="fixed top-0 left-0 right-0 h-8 bg-light-300 dark:bg-dark-300 flex items-center justify-between px-4 select-none drag z-50">
-        <div className="text-gray-600 dark:text-gray-400 text-sm">Fantasy.Comet</div>
-        <div className="flex items-center space-x-2 no-drag">
-          <motion.button
-            whileHover={{ backgroundColor: '#2c2e33' }}
-            onClick={() => handleWindowControl('minimize')}
-            className="p-1 rounded-md text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
-          >
-            <MinusIcon className="w-4 h-4" />
-          </motion.button>
-          <motion.button
-            whileHover={{ backgroundColor: '#2c2e33' }}
-            onClick={() => handleWindowControl('maximize')}
-            className="p-1 rounded-md text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
-          >
-            <ArrowsPointingOutIcon className="w-4 h-4" />
-          </motion.button>
-          <motion.button
-            whileHover={{ backgroundColor: '#e53935' }}
-            onClick={() => handleWindowControl('close')}
-            className="p-1 rounded-md text-gray-600 dark:text-gray-400 hover:text-white"
-          >
-            <XMarkIcon className="w-4 h-4" />
-          </motion.button>
-        </div>
-      </div>
-
-      {/* Main Content with top padding for title bar */}
-      <div className="flex flex-1 pt-8">
-        {/* Sidebar */}
-        <motion.div 
-          initial={{ x: -100 }}
-          animate={{ x: 0 }}
-          className="w-64 bg-light-100 dark:bg-dark-200 shadow-xl z-10 h-[calc(100vh-2rem)] flex flex-col"
-        >
-          <div className="p-6">
-            <h1 className="text-2xl font-bold text-primary">
-              {tabTitles[selectedTab]}
-            </h1>
-          </div>
-          <nav className="mt-6 px-2 flex-1">
-            {[
-              { name: 'Dashboard', icon: ChartBarIcon, id: 'dashboard' },
-              { name: 'Software', icon: UserGroupIcon, id: 'Software' },
-              { name: 'Forum', icon: ChatBubbleLeftIcon, id: 'Forum' },
-              { name: 'Settings', icon: CogIcon, id: 'settings' }
-            ].map((item) => (
-              <motion.button
-                key={item.id}
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-                onClick={() => handleTabChange(item.id)}
-                className={`w-full flex items-center px-4 py-3 mb-2 rounded-lg text-left transition-colors duration-200 ease-in-out ${
-                  selectedTab === item.id 
-                    ? 'bg-primary text-dark-400 shadow-md' 
-                    : 'text-gray-600 dark:text-gray-400 hover:bg-light-200 dark:hover:bg-dark-100'
-                }`}
-              >
-                <item.icon className="w-5 h-5 mr-3" />
-                {item.name}
-              </motion.button>
-            ))}
-          </nav>
-          
-          {/* Forum Button at bottom of sidebar */}
-          <div className="p-4 border-t border-light-300 dark:border-dark-100">
-            <motion.button
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-              onClick={() => setIsForumFullView(true)}
-              className="w-full flex items-center justify-center px-4 py-3 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-colors duration-200"
+    <div className="flex flex-col h-screen bg-light-200 dark:bg-dark-300 text-gray-800 dark:text-gray-200">
+      {/* API Key Setup Screen */}
+      {!hasApiKey ? (
+        <div className="flex items-center justify-center h-screen bg-light-200 dark:bg-dark-300">
+          <div className="w-full max-w-md px-4">
+            <motion.div
+              initial={{ opacity: 0, y: -20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mb-8 text-center"
             >
-              <ChatBubbleLeftIcon className="w-5 h-5 mr-2" />
-              Open Forum
-            </motion.button>
+              <h1 className="text-3xl font-bold text-gray-800 dark:text-gray-200 mb-2">Welcome to Constelia Comet</h1>
+              <p className="text-gray-600 dark:text-gray-400">
+                Please set up your API key to continue
+              </p>
+            </motion.div>
+            <ApiKeySetup onKeySet={handleApiKeySet} />
           </div>
-        </motion.div>
-
-        {/* Main content area */}
-        <div className="flex-1 flex flex-col overflow-hidden h-[calc(100vh-2rem)]">
-          {/* Header */}
-          <div className="h-14 bg-light-100 dark:bg-dark-200 shadow-sm flex items-center justify-between px-8 z-10">
-            <h2 className="text-xl font-semibold text-gray-800 dark:text-gray-200">
-              Welcome back, {memberInfo?.username || systemInfo?.username || 'User'}!
-            </h2>
-            <div className="flex items-center space-x-4">
-              {/* Refresh Button with Timer */}
-              <div className="relative group">
-                <motion.button
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  disabled={isRefreshing || refreshCountdown > 0}
-                  onClick={handleManualRefresh}
-                  className="p-2 rounded-full hover:bg-light-200 dark:hover:bg-dark-100 transition-colors duration-200 relative disabled:opacity-50"
-                >
-                  <ArrowPathIcon 
-                    className={`w-6 h-6 text-gray-600 dark:text-gray-400 transition-all duration-700 
-                      ${isRefreshing ? 'rotate-180' : ''} 
-                      ${refreshCountdown > 0 ? 'opacity-50' : ''}`} 
-                  />
-                  {refreshCountdown > 0 && (
-                    <div className="absolute -bottom-1 -right-1 bg-primary text-white text-xs rounded-full w-4 h-4 flex items-center justify-center">
-                      {refreshCountdown}
-                    </div>
-                  )}
-                </motion.button>
-                {/* Tooltip showing next auto-refresh */}
-                <div className="absolute -bottom-8 left-1/2 transform -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
-                  <div className="bg-dark-200 text-gray-400 text-xs py-1 px-2 rounded">
-                    Auto refresh in {formatTimeRemaining(nextRefreshTime)}
-                  </div>
-                </div>
-              </div>
-
-              {/* Messages Button */}
-              {unreadMessages > 0 && (
-                <motion.button
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  className="p-2 rounded-full hover:bg-light-200 dark:hover:bg-dark-100 transition-colors duration-200 relative"
-                  onClick={(e) => handleForumLinkClick('https://constelia.ai/forums/index.php?direct-messages/', e.shiftKey)}
-                >
-                  <EnvelopeIcon className="w-6 h-6 text-gray-600 dark:text-gray-400" />
-                  <span className="absolute -top-1 -right-1 bg-primary text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
-                    {unreadMessages}
-                  </span>
-                </motion.button>
-              )}
-              
-              {/* Notifications Button */}
+        </div>
+      ) : (
+        // Existing app content
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.3 }}
+          className="h-full bg-light-200 dark:bg-dark-400"
+        >
+          {/* Fixed Title Bar */}
+          <div className="fixed top-0 left-0 right-0 h-8 bg-light-300 dark:bg-dark-300 flex items-center justify-between px-4 select-none drag z-50">
+            <div className="text-gray-600 dark:text-gray-400 text-sm">Fantasy.Comet</div>
+            <div className="flex items-center space-x-2 no-drag">
               <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                className="p-2 rounded-full hover:bg-light-200 dark:hover:bg-dark-100 transition-colors duration-200 relative"
-                onClick={() => setIsNotificationDrawerOpen(true)}
+                whileHover={{ backgroundColor: '#2c2e33' }}
+                onClick={() => handleWindowControl('minimize')}
+                className="p-1 rounded-md text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
               >
-                <BellIcon className="w-6 h-6 text-gray-600 dark:text-gray-400" />
-                {alerts.length > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-primary text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
-                    {alerts.length}
-                  </span>
-                )}
+                <MinusIcon className="w-4 h-4" />
+              </motion.button>
+              <motion.button
+                whileHover={{ backgroundColor: '#2c2e33' }}
+                onClick={() => handleWindowControl('maximize')}
+                className="p-1 rounded-md text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
+              >
+                <ArrowsPointingOutIcon className="w-4 h-4" />
+              </motion.button>
+              <motion.button
+                whileHover={{ backgroundColor: '#e53935' }}
+                onClick={() => handleWindowControl('close')}
+                className="p-1 rounded-md text-gray-600 dark:text-gray-400 hover:text-white"
+              >
+                <XMarkIcon className="w-4 h-4" />
               </motion.button>
             </div>
           </div>
 
-          {/* Content area */}
-          <div ref={contentRef} className="flex-1 p-6 pb-12 overflow-y-auto">
-            {isLoading ? (
-              <div className="w-full p-4 space-y-4">
-                <div className="flex space-x-4">
-                  <Skeleton className="w-64 h-32" />
-                  <Skeleton className="flex-1 h-32" />
+          {/* Main Content with top padding for title bar */}
+          <div className="flex flex-1 pt-8">
+            {/* Sidebar */}
+            <motion.div 
+              initial={{ 
+                width: isSidebarCollapsed ? '64px' : '256px',
+                x: 0
+              }}
+              animate={{ 
+                x: 0,
+                width: isSidebarCollapsed ? '64px' : '256px',
+                transition: { 
+                  type: "spring", 
+                  stiffness: 300, 
+                  damping: 30 
+                }
+              }}
+              className={`${isSidebarCollapsed ? 'w-16' : 'w-64'} bg-light-100 dark:bg-dark-200 shadow-xl z-10 h-[calc(100vh-2rem)] flex flex-col transition-all duration-300`}
+            >
+              <div className={`${isSidebarCollapsed ? 'p-3' : 'p-6'} transition-all duration-300`}>
+                <AnimatePresence mode="wait">
+                  {!isSidebarCollapsed && (
+                    <motion.h1 
+                      initial={{ opacity: 1, x: 0 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: -20 }}
+                      transition={{ duration: 0.2, delay: 0.15 }}
+                      className="text-2xl font-bold text-primary"
+                    >
+                      {tabTitles[selectedTab]}
+                    </motion.h1>
+                  )}
+                </AnimatePresence>
+              </div>
+              <nav className={`mt-6 ${isSidebarCollapsed ? 'px-1' : 'px-2'} flex-1 transition-all duration-300`}>
+                {[
+                  { name: 'Dashboard', icon: ChartBarIcon, id: 'dashboard' },
+                  { name: 'Software', icon: UserGroupIcon, id: 'Software' },
+                  { name: 'Forum', icon: ChatBubbleLeftIcon, id: 'Forum' },
+                  { name: 'Settings', icon: CogIcon, id: 'settings' }
+                ].map((item) => (
+                  <motion.button
+                    key={item.id}
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => handleTabChange(item.id)}
+                    className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center' : 'justify-start'} ${isSidebarCollapsed ? 'px-2' : 'px-4'} py-3 mb-2 rounded-lg text-left transition-all duration-300 ${
+                      selectedTab === item.id 
+                        ? 'bg-primary text-dark-400 shadow-md' 
+                        : 'text-gray-600 dark:text-gray-400 hover:bg-light-200 dark:hover:bg-dark-100'
+                    }`}
+                  >
+                    <motion.div
+                      animate={{ 
+                        rotate: isSidebarCollapsed && selectedTab === item.id ? [0, -10, 10, -5, 5, 0] : 0 
+                      }}
+                      transition={{ duration: 0.5, type: "spring" }}
+                    >
+                      <item.icon className={`w-5 h-5 ${isSidebarCollapsed ? '' : 'mr-3'}`} />
+                    </motion.div>
+                    <AnimatePresence mode="wait">
+                      {!isSidebarCollapsed && (
+                        <motion.span
+                          initial={{ opacity: 1, width: "auto" }}
+                          animate={{ opacity: 1, width: "auto" }}
+                          exit={{ opacity: 0, width: 0 }}
+                          transition={{ duration: 0.2, delay: 0.15 }}
+                          className="whitespace-nowrap overflow-hidden"
+                        >
+                          {item.name}
+                        </motion.span>
+                      )}
+                    </AnimatePresence>
+                  </motion.button>
+                ))}
+              </nav>
+              
+              {/* Forum Button at bottom of sidebar */}
+              <div className={`${isSidebarCollapsed ? 'p-2' : 'p-4'} border-t border-light-300 dark:border-dark-100 transition-all duration-300`}>
+                <motion.button
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => setIsForumFullView(true)}
+                  className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center' : 'justify-center'} ${isSidebarCollapsed ? 'px-2' : 'px-4'} py-3 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-all duration-300`}
+                >
+                  <ChatBubbleLeftIcon className={`w-5 h-5 ${isSidebarCollapsed ? '' : 'mr-2'}`} />
+                  <AnimatePresence mode="wait">
+                    {!isSidebarCollapsed && (
+                      <motion.span
+                        initial={{ opacity: 1, width: "auto" }}
+                        animate={{ opacity: 1, width: "auto" }}
+                        exit={{ opacity: 0, width: 0 }}
+                        transition={{ duration: 0.2, delay: 0.15 }}
+                        className="whitespace-nowrap overflow-hidden"
+                      >
+                        Open Forum
+                      </motion.span>
+                    )}
+                  </AnimatePresence>
+                </motion.button>
+              </div>
+            </motion.div>
+
+            {/* Main content area */}
+            <div className="flex-1 flex flex-col overflow-hidden h-[calc(100vh-2rem)]">
+              {/* Header */}
+              <div className="h-14 bg-light-100 dark:bg-dark-200 shadow-sm flex items-center justify-between px-8 z-10">
+                <div className="flex items-center">
+                  {/* Sidebar toggle button */}
+                  <motion.button
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={toggleSidebar}
+                    className="p-2 mr-4 rounded-full hover:bg-light-200 dark:hover:bg-dark-100 transition-colors duration-200"
+                    title="Toggle Sidebar (Ctrl+S)"
+                  >
+                    <motion.div
+                      animate={{ 
+                        rotate: isSidebarCollapsed ? 180 : 0 
+                      }}
+                      transition={{ duration: 0.3 }}
+                    >
+                      <Bars3Icon className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+                    </motion.div>
+                  </motion.button>
+                  <h2 className="text-xl font-semibold text-gray-800 dark:text-gray-200">
+                    Welcome back, {memberInfo?.username || systemInfo?.username || 'User'}!
+                  </h2>
                 </div>
-                <Skeleton className="w-full h-64" />
-                <div className="grid grid-cols-2 gap-4">
-                  <Skeleton className="h-48" />
-                  <Skeleton className="h-48" />
+                <div className="flex items-center space-x-4">
+                  {/* Refresh Button with Timer */}
+                  <div className="relative group">
+                    <motion.button
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                      disabled={isRefreshing || refreshCountdown > 0}
+                      onClick={handleManualRefresh}
+                      className="p-2 rounded-full hover:bg-light-200 dark:hover:bg-dark-100 transition-colors duration-200 relative disabled:opacity-50"
+                    >
+                      <ArrowPathIcon 
+                        className={`w-6 h-6 text-gray-600 dark:text-gray-400 transition-all duration-700 
+                          ${isRefreshing ? 'rotate-180' : ''} 
+                          ${refreshCountdown > 0 ? 'opacity-50' : ''}`} 
+                      />
+                      {refreshCountdown > 0 && (
+                        <div className="absolute -bottom-1 -right-1 bg-primary text-white text-xs rounded-full w-4 h-4 flex items-center justify-center">
+                          {refreshCountdown}
+                        </div>
+                      )}
+                    </motion.button>
+                    {/* Tooltip showing next auto-refresh */}
+                    <div className="absolute -bottom-8 left-1/2 transform -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+                      <div className="bg-dark-200 text-gray-400 text-xs py-1 px-2 rounded">
+                        Auto refresh in {formatTimeRemaining(nextRefreshTime)}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Messages Button */}
+                  {unreadMessages > 0 && (
+                    <motion.button
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                      className="p-2 rounded-full hover:bg-light-200 dark:hover:bg-dark-100 transition-colors duration-200 relative"
+                      onClick={(e) => handleForumLinkClick('https://constelia.ai/forums/index.php?direct-messages/', e.shiftKey)}
+                    >
+                      <EnvelopeIcon className="w-6 h-6 text-gray-600 dark:text-gray-400" />
+                      <span className="absolute -top-1 -right-1 bg-primary text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                        {unreadMessages}
+                      </span>
+                    </motion.button>
+                  )}
+                  
+                  {/* Notifications Button */}
+                  <motion.button
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    className="p-2 rounded-full hover:bg-light-200 dark:hover:bg-dark-100 transition-colors duration-200 relative"
+                    onClick={() => setIsNotificationDrawerOpen(true)}
+                  >
+                    <BellIcon className="w-6 h-6 text-gray-600 dark:text-gray-400" />
+                    {alerts.length > 0 && (
+                      <span className="absolute -top-1 -right-1 bg-primary text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                        {alerts.length}
+                      </span>
+                    )}
+                  </motion.button>
                 </div>
               </div>
-            ) : (
-              <ForumContext.Provider value={{ scrollRef: { smoothScrollToElement } }}>
-                {renderContent()}
-              </ForumContext.Provider>
-            )}
+
+              {/* Content area */}
+              <div ref={contentRef} className="flex-1 p-6 pb-12 overflow-y-auto">
+                {isLoading ? (
+                  <div className="w-full p-4 space-y-4">
+                    <div className="flex space-x-4">
+                      <Skeleton className="w-64 h-32" />
+                      <Skeleton className="flex-1 h-32" />
+                    </div>
+                    <Skeleton className="w-full h-64" />
+                    <div className="grid grid-cols-2 gap-4">
+                      <Skeleton className="h-48" />
+                      <Skeleton className="h-48" />
+                    </div>
+                  </div>
+                ) : (
+                  <ForumContext.Provider value={{ scrollRef: { smoothScrollToElement } }}>
+                    {renderContent()}
+                  </ForumContext.Provider>
+                )}
+              </div>
+            </div>
           </div>
-        </div>
-      </div>
 
-      {/* Notification Drawer */}
-      <NotificationDrawer 
-        isOpen={isNotificationDrawerOpen}
-        onClose={() => setIsNotificationDrawerOpen(false)}
-        alerts={alerts}
-      />
-
-      {/* Forum Modal */}
-      <AnimatePresence>
-        {isForumModalOpen && (
-          <ForumWebView 
-            isOpen={isForumModalOpen} 
-            onClose={() => setIsForumModalOpen(false)}
+          {/* Notification Drawer */}
+          <NotificationDrawer 
+            isOpen={isNotificationDrawerOpen}
+            onClose={() => setIsNotificationDrawerOpen(false)}
+            alerts={alerts}
           />
-        )}
-      </AnimatePresence>
-    </motion.div>
+
+          {/* Forum Modal */}
+          <AnimatePresence>
+            {isForumModalOpen && (
+              <ForumWebView 
+                isOpen={isForumModalOpen} 
+                onClose={() => setIsForumModalOpen(false)}
+              />
+            )}
+          </AnimatePresence>
+        </motion.div>
+      )}
+    </div>
   )
 }
 

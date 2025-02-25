@@ -56,7 +56,86 @@ const ForumWebView = forwardRef(({ isOpen, onClose, isFullView = false }, ref) =
     if (!webview) return
 
     const handleDomReady = () => {
+      console.log('[FORUM] DOM Ready')
       setIsDomReady(true)
+      setCurrentUrl(webview.src)
+      
+      // Inject a script to ensure images load properly
+      webview.executeJavaScript(`
+        console.log('[FORUM] Running image fix script');
+        document.querySelectorAll('img').forEach(img => {
+          // Add error handler
+          if (!img.hasAttribute('data-error-handler-attached')) {
+            img.setAttribute('data-error-handler-attached', 'true');
+            
+            img.onerror = function() {
+              console.log('[IMAGE] Error loading image, retrying with bypass:', this.src);
+              if (!this.src.includes('bypassCache=1')) {
+                this.src = this.src + '&bypassCache=1';
+              }
+            };
+            
+            // Proactively add bypass for attachment URLs with specific format (1740437904432.png.11205)
+            if (img.src && img.src.match(/\\/forums\\/index\\.php\\?attachments\\/[\\d\\.]+\\.png\\.\\d+/) && !img.src.includes('bypassCache=1')) {
+              console.log('[IMAGE] Proactively adding bypass to specific format attachment:', img.src);
+              img.src = img.src + '&bypassCache=1';
+            }
+            // Proactively add bypass for other attachment URLs
+            else if (img.src && img.src.includes('constelia.ai/forums/index.php?attachments/') && !img.src.includes('bypassCache=1')) {
+              console.log('[IMAGE] Proactively adding bypass to attachment:', img.src);
+              img.src = img.src + '&bypassCache=1';
+            }
+          }
+        });
+        
+        // Monitor for dynamically added images
+        const observer = new MutationObserver((mutations) => {
+          mutations.forEach(mutation => {
+            if (mutation.type === 'childList') {
+              mutation.addedNodes.forEach(node => {
+                if (node.nodeName === 'IMG') {
+                  handleImage(node);
+                } else if (node.querySelectorAll) {
+                  node.querySelectorAll('img').forEach(handleImage);
+                }
+              });
+            }
+          });
+        });
+        
+        function handleImage(img) {
+          if (!img.hasAttribute('data-error-handler-attached')) {
+            img.setAttribute('data-error-handler-attached', 'true');
+            img.onerror = function() {
+              if (!this.src.includes('bypassCache=1')) {
+                this.src = this.src + '&bypassCache=1';
+              }
+            };
+            
+            // Proactively add bypass for attachment URLs with specific format
+            if (img.src && img.src.match(/\\/forums\\/index\\.php\\?attachments\\/[\\d\\.]+\\.png\\.\\d+/) && !img.src.includes('bypassCache=1')) {
+              img.src = img.src + '&bypassCache=1';
+            }
+            // Proactively add bypass for other attachment URLs
+            else if (img.src && img.src.includes('constelia.ai/forums/index.php?attachments/') && !img.src.includes('bypassCache=1')) {
+              img.src = img.src + '&bypassCache=1';
+            }
+          }
+        }
+        
+        observer.observe(document.body, {
+          childList: true,
+          subtree: true
+        });
+        
+        // Cache forum cookies in localStorage for potential use in the app
+        try {
+          localStorage.setItem('forum_cookies', document.cookie);
+        } catch (e) {
+          console.error('Could not store cookies:', e);
+        }
+      `)
+      
       setTimeout(updateNavigationState, 100)
     }
 
@@ -84,13 +163,10 @@ const ForumWebView = forwardRef(({ isOpen, onClose, isFullView = false }, ref) =
 
     const handleNewWindow = (event) => {
       event.preventDefault()
-      const config = window.electronAPI.getConfig()
-      
-      if (config.openForumInApp) {
-        webview.src = event.url
+      // Always open links in the webview
+      if (webviewRef.current) {
+        webviewRef.current.src = event.url
         setCurrentUrl(event.url)
-      } else {
-        window.electronAPI.openExternal(event.url)
       }
     }
 
@@ -216,6 +292,16 @@ const ForumWebView = forwardRef(({ isOpen, onClose, isFullView = false }, ref) =
             partition="persist:forum"
             allowpopups="true"
             webpreferences="contextIsolation=true"
+            preload="file://${__dirname}/forum-preload.js"
+            httpreferrer="https://constelia.ai/forums/"
+            useragent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"
+            disablewebsecurity="false"
+            plugins="true"
+            nodeintegration="false"
+            nodeintegrationinsubframes="false"
+            enableremotemodule="false"
+            webviewtag="true"
+            allowtransparency="false"
           />
         </div>
       </div>
@@ -243,9 +329,9 @@ const ForumWebView = forwardRef(({ isOpen, onClose, isFullView = false }, ref) =
               e.stopPropagation()
               onClose()
             }}
-            className="p-2 rounded-lg bg-dark-300/50 hover:bg-dark-300 transition-colors"
+            className="p-2 rounded-lg bg-light-200/50 dark:bg-dark-300/50 hover:bg-light-200 dark:hover:bg-dark-300 transition-colors"
           >
-            <XMarkIcon className="w-6 h-6 text-gray-200" />
+            <XMarkIcon className="w-6 h-6 text-gray-700 dark:text-gray-200" />
           </button>
         </div>
 
@@ -254,23 +340,23 @@ const ForumWebView = forwardRef(({ isOpen, onClose, isFullView = false }, ref) =
           <button
             onClick={handleGoBack}
             disabled={!canGoBack || !isDomReady}
-            className="p-2 rounded-lg bg-dark-300/50 hover:bg-dark-300 transition-colors disabled:opacity-30 disabled:hover:bg-dark-300/50"
+            className="p-2 rounded-lg bg-light-200/50 dark:bg-dark-300/50 hover:bg-light-200 dark:hover:bg-dark-300 transition-colors disabled:opacity-30 disabled:hover:bg-light-200/50 dark:disabled:hover:bg-dark-300/50"
           >
-            <ArrowLeftIcon className="w-6 h-6 text-gray-200" />
+            <ArrowLeftIcon className="w-6 h-6 text-gray-700 dark:text-gray-200" />
           </button>
           <button
             onClick={handleGoForward}
             disabled={!canGoForward || !isDomReady}
-            className="p-2 rounded-lg bg-dark-300/50 hover:bg-dark-300 transition-colors disabled:opacity-30 disabled:hover:bg-dark-300/50"
+            className="p-2 rounded-lg bg-light-200/50 dark:bg-dark-300/50 hover:bg-light-200 dark:hover:bg-dark-300 transition-colors disabled:opacity-30 disabled:hover:bg-light-200/50 dark:disabled:hover:bg-dark-300/50"
           >
-            <ArrowRightIcon className="w-6 h-6 text-gray-200" />
+            <ArrowRightIcon className="w-6 h-6 text-gray-700 dark:text-gray-200" />
           </button>
           <button
             onClick={handleRefresh}
             disabled={!isDomReady || isLoading}
-            className="p-2 rounded-lg bg-dark-300/50 hover:bg-dark-300 transition-colors disabled:opacity-30 disabled:hover:bg-dark-300/50"
+            className="p-2 rounded-lg bg-light-200/50 dark:bg-dark-300/50 hover:bg-light-200 dark:hover:bg-dark-300 transition-colors disabled:opacity-30 disabled:hover:bg-light-200/50 dark:disabled:hover:bg-dark-300/50"
           >
-            <ArrowPathIcon className={`w-6 h-6 text-gray-200 ${isLoading ? 'animate-spin' : ''}`} />
+            <ArrowPathIcon className={`w-6 h-6 text-gray-700 dark:text-gray-200 ${isLoading ? 'animate-spin' : ''}`} />
           </button>
         </div>
         
@@ -281,6 +367,16 @@ const ForumWebView = forwardRef(({ isOpen, onClose, isFullView = false }, ref) =
           partition="persist:forum"
           allowpopups="true"
           webpreferences="contextIsolation=true"
+          preload="file://${__dirname}/forum-preload.js"
+          httpreferrer="https://constelia.ai/forums/"
+          useragent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"
+          disablewebsecurity="false"
+          plugins="true"
+          nodeintegration="false"
+          nodeintegrationinsubframes="false"
+          enableremotemodule="false"
+          webviewtag="true"
+          allowtransparency="false"
         />
       </motion.div>
     </motion.div>

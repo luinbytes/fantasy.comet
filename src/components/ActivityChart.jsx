@@ -16,14 +16,12 @@ const ActivityChart = forwardRef((props, ref) => {
     timeSpan: ''
   })
 
-  // Expose updateData method to parent
   useImperativeHandle(ref, () => ({
     updateData: (posts) => {
       if (posts) {
         const chartData = groupPostsByHour(posts)
         setActivityData(chartData)
         
-        // Update stats
         const uniqueUsers = new Set(posts.map(post => post.username)).size
         const timestamps = posts.map(post => parseInt(post.post_date) * 1000)
         const oldestPost = new Date(Math.min(...timestamps))
@@ -37,7 +35,6 @@ const ActivityChart = forwardRef((props, ref) => {
     }
   }))
 
-  // Initial load
   useEffect(() => {
     const storedKey = window.electronAPI.getApiKey()
     if (!storedKey) {
@@ -56,7 +53,6 @@ const ActivityChart = forwardRef((props, ref) => {
         const chartData = groupPostsByHour(posts)
         setActivityData(chartData)
         
-        // Update stats
         const uniqueUsers = new Set(posts.map(post => post.username)).size
         const timestamps = posts.map(post => parseInt(post.post_date) * 1000)
         const oldestPost = new Date(Math.min(...timestamps))
@@ -80,12 +76,11 @@ const ActivityChart = forwardRef((props, ref) => {
   const groupPostsByHour = (posts) => {
     if (!posts.length) return []
 
-    // Find the time range from the posts
     const timestamps = posts.map(post => {
       const timestamp = parseInt(post.post_date) * 1000
       if (isNaN(timestamp)) {
         console.error(`[ACTIVITY] Invalid post date: ${post.post_date}`)
-        return Date.now() // Fallback to current time
+        return Date.now()
       }
       return timestamp
     })
@@ -93,17 +88,14 @@ const ActivityChart = forwardRef((props, ref) => {
     const oldestPost = Math.min(...timestamps)
     const newestPost = Math.max(...timestamps)
     
-    // Round to nearest hour
     const startTime = new Date(oldestPost)
     startTime.setMinutes(0, 0, 0)
     
     const endTime = new Date(newestPost)
     endTime.setMinutes(59, 59, 999)
     
-    // Calculate number of hours between start and end
     const hoursDiff = Math.ceil((endTime - startTime) / (60 * 60 * 1000))
 
-    // Create array for each hour in the range
     const hours = Array.from({ length: hoursDiff + 1 }, (_, i) => {
       const hour = new Date(startTime.getTime() + (i * 60 * 60 * 1000))
       return {
@@ -114,7 +106,6 @@ const ActivityChart = forwardRef((props, ref) => {
       }
     })
 
-    // Group posts into hours
     posts.forEach(post => {
       const postDate = new Date(parseInt(post.post_date) * 1000)
       const hourIndex = Math.floor((postDate - startTime) / (60 * 60 * 1000))
@@ -133,7 +124,6 @@ const ActivityChart = forwardRef((props, ref) => {
 
   const handlePostClick = (post) => {
     if (window.electronAPI && post) {
-      // If post.id is different from thread_id, it's a reply, so include the post ID
       const forumUrl = post.id !== post.thread_id 
         ? `https://constelia.ai/forums/index.php?threads/${post.thread_id}/post-${post.id}`
         : `https://constelia.ai/forums/index.php?threads/${post.thread_id}`
@@ -174,7 +164,6 @@ const ActivityChart = forwardRef((props, ref) => {
     return (
       <div className="h-full flex items-center justify-center">
         <ApiKeySetup onKeySet={() => {
-          // Refresh data after key is set
           fetchInitialData()
         }} />
       </div>
@@ -226,14 +215,14 @@ const ActivityChart = forwardRef((props, ref) => {
                 
                 const data = payload[0].payload;
                 return (
-                  <div className="bg-dark-200 rounded-lg shadow-lg p-2 border border-dark-100">
-                    <div className="text-white font-medium">
+                  <div className="bg-light-100 dark:bg-dark-200 rounded-lg shadow-lg p-2 border border-light-300 dark:border-dark-100">
+                    <div className="text-gray-800 dark:text-white font-medium">
                       {data.count} posts
                     </div>
-                    <div className="text-gray-400 text-sm">
+                    <div className="text-gray-600 dark:text-gray-400 text-sm">
                       {data.time}
                     </div>
-                    <div className="text-gray-500 text-xs mt-1 italic">
+                    <div className="text-gray-500 dark:text-gray-500 text-xs mt-1 italic">
                       Click for more info
                     </div>
                   </div>
@@ -262,29 +251,28 @@ const ActivityChart = forwardRef((props, ref) => {
         </ResponsiveContainer>
       </div>
 
-      {/* Popup */}
       {selectedPoint && (
         <div 
           className="absolute inset-0 bg-black/50 flex items-center justify-center z-50"
           onClick={handleBackgroundClick}
         >
           <div 
-            className="bg-dark-200 rounded-lg shadow-lg p-4 border border-dark-100 w-[90%] max-w-4xl mx-4"
+            className="bg-light-100 dark:bg-dark-200 rounded-lg shadow-lg p-4 border border-light-300 dark:border-dark-100 w-[90%] max-w-4xl mx-4"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex justify-between items-center mb-3">
-              <div className="text-lg font-semibold text-white">
+              <div className="text-lg font-semibold text-gray-800 dark:text-white">
                 {selectedPoint.count} posts this hour
-                <div className="text-sm text-gray-400 font-normal">
+                <div className="text-sm text-gray-600 dark:text-gray-400 font-normal">
                   {selectedPoint.time}
                 </div>
               </div>
               <button 
                 onClick={handleClosePopup}
-                className="p-1.5 hover:bg-dark-100 rounded-lg transition-colors group"
+                className="p-1.5 hover:bg-light-200 dark:hover:bg-dark-100 rounded-lg transition-colors group"
               >
                 <svg 
-                  className="w-4 h-4 text-gray-400 group-hover:text-white transition-colors" 
+                  className="w-4 h-4 text-gray-500 dark:text-gray-400 group-hover:text-gray-700 dark:group-hover:text-white transition-colors" 
                   fill="none" 
                   viewBox="0 0 24 24" 
                   stroke="currentColor"
@@ -300,14 +288,14 @@ const ActivityChart = forwardRef((props, ref) => {
                     key={i} 
                     onClick={() => handlePostClick(post)}
                     title="Click to open forum post"
-                    className="p-3 bg-dark-300 rounded-lg text-left hover:bg-dark-100 transition-colors cursor-pointer flex flex-col h-full group"
+                    className="p-3 bg-light-200 dark:bg-dark-300 rounded-lg text-left hover:bg-light-300 dark:hover:bg-dark-100 transition-colors cursor-pointer flex flex-col h-full group"
                   >
-                    <div className="font-medium text-white mb-1 break-words line-clamp-2 group-hover:text-primary transition-colors">
+                    <div className="font-medium text-gray-800 dark:text-white mb-1 break-words line-clamp-2 group-hover:text-primary transition-colors">
                       {post.title}
                     </div>
                     <div className="mt-auto">
-                      <div className="text-gray-300 text-sm">by {post.username}</div>
-                      <div className="text-gray-400 text-xs mt-1">{post.formattedDate}</div>
+                      <div className="text-gray-700 dark:text-gray-300 text-sm">by {post.username}</div>
+                      <div className="text-gray-500 dark:text-gray-400 text-xs mt-1">{post.formattedDate}</div>
                     </div>
                   </button>
                 ))}

@@ -3,8 +3,33 @@
 @import 'tailwindcss/utilities';
 
 :root {
+  /* Default palette (pink) */
   --primary: #f0a5c0;
   --secondary: #e88dac;
+}
+
+/* Blue palette */
+.palette-blue {
+  --primary: #60a5fa;
+  --secondary: #3b82f6;
+}
+
+/* Green palette */
+.palette-green {
+  --primary: #34d399;
+  --secondary: #10b981;
+}
+
+/* Purple palette */
+.palette-purple {
+  --primary: #a78bfa;
+  --secondary: #8b5cf6;
+}
+
+/* Orange palette */
+.palette-orange {
+  --primary: #fb923c;
+  --secondary: #f97316;
 }
 
 html {
