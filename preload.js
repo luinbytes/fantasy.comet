@@ -22,7 +22,9 @@ const defaultConfig = {
   notifications: true,
   autoUpdate: false,
   lastCheck: null,
-  sidebarCollapsed: false
+  sidebarCollapsed: false,
+  smoothScrolling: true,
+  smoothScrollingSpeed: 0.6
 }
 
 // Clean config file on startup to remove deprecated settings
@@ -151,7 +153,23 @@ const systemInfo = {
   },
 
   openExternal: (url) => {
-    shell.openExternal(url)
+    // Check if the URL is from a media site that should be opened in a modal
+    const isMediaSite = 
+      url.includes('imgur.com') || 
+      url.includes('youtube.com') || 
+      url.includes('youtu.be') ||
+      url.includes('i.redd.it') ||
+      url.includes('v.redd.it') ||
+      url.includes('gfycat.com') ||
+      url.includes('giphy.com');
+    
+    if (isMediaSite) {
+      // Send a message to the renderer to open the URL in a modal
+      ipcRenderer.send('open-external-modal', url);
+    } else {
+      // For non-media sites, use the default external browser
+      shell.openExternal(url);
+    }
   },
 
   openConfigFolder: () => {
@@ -420,4 +438,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getMember: systemInfo.getMember,
   getForumPosts: systemInfo.getForumPosts,
   rollLoot: systemInfo.rollLoot,
+  
+  // IPC for external modal
+  ipcRenderer: {
+    on: (channel, func) => {
+      if (channel === 'open-external-modal') {
+        ipcRenderer.on(channel, func)
+      }
+    },
+    removeListener: (channel, func) => {
+      if (channel === 'open-external-modal') {
+        ipcRenderer.removeListener(channel, func)
+      }
+    }
+  }
 }) 

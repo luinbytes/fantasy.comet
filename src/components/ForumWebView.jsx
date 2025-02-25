@@ -15,6 +15,7 @@ const ForumWebView = forwardRef(({ isOpen, onClose, isFullView = false }, ref) =
   const [currentUrl, setCurrentUrl] = useState('https://constelia.ai/forums')
   const [isLoading, setIsLoading] = useState(false)
   const [isDomReady, setIsDomReady] = useState(false)
+  const [externalModal, setExternalModal] = useState({ isOpen: false, url: null })
 
   useEffect(() => {
     if (ref) {
@@ -169,6 +170,11 @@ const ForumWebView = forwardRef(({ isOpen, onClose, isFullView = false }, ref) =
         setCurrentUrl(event.url)
       }
     }
+    
+    const handleExternalModal = (event, url) => {
+      event.preventDefault()
+      setExternalModal({ isOpen: true, url })
+    }
 
     // Add event listeners
     webview.addEventListener('dom-ready', handleDomReady)
@@ -178,6 +184,11 @@ const ForumWebView = forwardRef(({ isOpen, onClose, isFullView = false }, ref) =
     webview.addEventListener('did-navigate', handleDidNavigate)
     webview.addEventListener('did-navigate-in-page', handleDidNavigateInPage)
     webview.addEventListener('new-window', handleNewWindow)
+    webview.addEventListener('ipc-message', (event) => {
+      if (event.channel === 'open-external-modal') {
+        setExternalModal({ isOpen: true, url: event.args[0] })
+      }
+    })
 
     // Cleanup function
     return () => {
@@ -228,6 +239,10 @@ const ForumWebView = forwardRef(({ isOpen, onClose, isFullView = false }, ref) =
         console.error(`[FORUM] Error refreshing: ${error.message}`)
       }
     }
+  }
+  
+  const closeExternalModal = () => {
+    setExternalModal({ isOpen: false, url: null })
   }
 
   if (!isOpen) return null
@@ -304,6 +319,46 @@ const ForumWebView = forwardRef(({ isOpen, onClose, isFullView = false }, ref) =
             allowtransparency="false"
           />
         </div>
+        
+        {/* External content modal */}
+        <AnimatePresence>
+          {externalModal.isOpen && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center"
+              onClick={closeExternalModal}
+            >
+              <motion.div
+                initial={{ scale: 0.95, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.95, opacity: 0 }}
+                className="bg-dark-200 w-[90%] h-[90%] max-w-5xl rounded-xl shadow-xl overflow-hidden relative"
+                onClick={e => e.stopPropagation()}
+              >
+                <div className="absolute top-4 right-4 z-10">
+                  <button
+                    onClick={closeExternalModal}
+                    className="p-2 rounded-lg bg-dark-300/50 hover:bg-dark-300 transition-colors"
+                  >
+                    <XMarkIcon className="w-6 h-6 text-gray-200" />
+                  </button>
+                </div>
+                
+                <div className="w-full h-full">
+                  <webview
+                    src={externalModal.url}
+                    className="w-full h-full"
+                    allowpopups="true"
+                    webpreferences="contextIsolation=true"
+                    useragent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"
+                  />
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     )
   }
@@ -378,6 +433,46 @@ const ForumWebView = forwardRef(({ isOpen, onClose, isFullView = false }, ref) =
           webviewtag="true"
           allowtransparency="false"
         />
+        
+        {/* External content modal */}
+        <AnimatePresence>
+          {externalModal.isOpen && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center"
+              onClick={closeExternalModal}
+            >
+              <motion.div
+                initial={{ scale: 0.95, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.95, opacity: 0 }}
+                className="bg-light-100 dark:bg-dark-200 w-[90%] h-[90%] max-w-5xl rounded-xl shadow-xl overflow-hidden relative"
+                onClick={e => e.stopPropagation()}
+              >
+                <div className="absolute top-4 right-4 z-10">
+                  <button
+                    onClick={closeExternalModal}
+                    className="p-2 rounded-lg bg-light-200/50 dark:bg-dark-300/50 hover:bg-light-200 dark:hover:bg-dark-300 transition-colors"
+                  >
+                    <XMarkIcon className="w-6 h-6 text-gray-700 dark:text-gray-200" />
+                  </button>
+                </div>
+                
+                <div className="w-full h-full">
+                  <webview
+                    src={externalModal.url}
+                    className="w-full h-full"
+                    allowpopups="true"
+                    webpreferences="contextIsolation=true"
+                    useragent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"
+                  />
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </motion.div>
     </motion.div>
   )

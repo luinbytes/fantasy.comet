@@ -37,7 +37,8 @@ window.addEventListener('DOMContentLoaded', () => {
 
   fixImages();
   setInterval(fixImages, 1000);
-
+  
+  // Set up observer for dynamic content
   const observer = new MutationObserver((mutations) => {
     mutations.forEach(mutation => {
       if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
@@ -50,6 +51,32 @@ window.addEventListener('DOMContentLoaded', () => {
     childList: true,
     subtree: true
   });
+
+  // Handle clicks on external links
+  document.addEventListener('click', (e) => {
+    // Find closest anchor tag
+    const link = e.target.closest('a');
+    if (!link) return;
+    
+    const href = link.getAttribute('href');
+    if (!href) return;
+    
+    // Check if it's an external link
+    const isExternal = 
+      (href.startsWith('http') && !href.includes('constelia.ai')) ||
+      href.includes('imgur.com') || 
+      href.includes('youtube.com') ||
+      href.includes('youtu.be');
+      
+    if (isExternal) {
+      e.preventDefault();
+      e.stopPropagation();
+      
+      // Send message to open in modal
+      ipcRenderer.sendToHost('open-external-modal', href);
+      return false;
+    }
+  }, true);
 
   const shareCookies = () => {
     try {

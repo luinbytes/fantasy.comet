@@ -89,7 +89,11 @@ body {
 
 /* Enable smooth scrolling globally */
 * {
-  scroll-behavior: smooth !important;
   overflow-behavior: smooth;
   -webkit-overflow-scrolling: touch;
+}
+
+/* Apply smooth scrolling only when the class is present */
+.smooth-scrolling * {
+  scroll-behavior: smooth !important;
 } 

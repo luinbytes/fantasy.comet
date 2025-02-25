@@ -14,6 +14,7 @@ import ForumPosts from './components/ForumPosts'
 import ForumWebView from './components/ForumWebView'
 import { ForumContext } from './contexts/ForumContext'
 import ApiKeySetup from './components/ApiKeySetup'
+import appIcon from '../assets/icons/icon.png'
 
 // Separate the main app content from the providers
 function AppContent() {
@@ -61,6 +62,8 @@ function AppContent() {
       return false
     }
   })
+  const [externalModal, setExternalModal] = useState({ isOpen: false, url: null })
+  const forumWebviewRef = useRef(null)
 
   // Function to toggle sidebar
   const toggleSidebar = useCallback(() => {
@@ -123,6 +126,17 @@ function AppContent() {
   // Add scroll event listener
   useEffect(() => {
     const handleWheel = (e) => {
+      // Get the smooth scrolling setting
+      const config = window.electronAPI.getConfig();
+      const smoothScrollingEnabled = config.smoothScrolling !== undefined ? config.smoothScrolling : true;
+      const smoothScrollingSpeed = config.smoothScrollingSpeed !== undefined ? config.smoothScrollingSpeed : 0.6;
+      
+      // If smooth scrolling is disabled, return early to allow default browser scrolling
+      if (!smoothScrollingEnabled) return;
+      
+      // Skip handling if the event target is inside a webview
+      if (e.target.closest('webview')) return;
+      
       const scrollableElement = e.target.closest('.overflow-y-auto')
       if (!scrollableElement) return
 
@@ -149,7 +163,7 @@ function AppContent() {
       scrollableElement.scrollTop += scrollAmount
 
       // Start momentum scrolling with easing in and out
-      let velocity = velocityRef.current * 0.6
+      let velocity = velocityRef.current * smoothScrollingSpeed
       let time = 0
       const applyMomentum = () => {
         time += 1/60  // Assuming 60fps
@@ -222,6 +236,34 @@ function AppContent() {
 
     scrollAnimationRef.current = requestAnimationFrame(animation)
   }, [])
+
+  // Apply smooth-scrolling class based on config
+  useEffect(() => {
+    const updateSmoothScrollingClass = () => {
+      const config = window.electronAPI.getConfig();
+      const smoothScrollingEnabled = config.smoothScrolling !== undefined ? config.smoothScrolling : true;
+      
+      if (smoothScrollingEnabled) {
+        document.body.classList.add('smooth-scrolling');
+      } else {
+        document.body.classList.remove('smooth-scrolling');
+      }
+    };
+    
+    // Initial setup
+    updateSmoothScrollingClass();
+    
+    // Listen for config changes
+    window.addEventListener('storage', (e) => {
+      if (e.key === 'fantasy.comet.config') {
+        updateSmoothScrollingClass();
+      }
+    });
+    
+    return () => {
+      window.removeEventListener('storage', updateSmoothScrollingClass);
+    };
+  }, []);
 
   // Modify the system info effect to only run on dashboard
   useEffect(() => {
@@ -772,13 +814,32 @@ function AppContent() {
 
   // Add this function near the top of the AppContent component
   const handleForumLinkClick = (url, isShiftClick = false) => {
-    if (isShiftClick) {
-      setIsForumModalOpen(true)
+    // Check if it's an external media link
+    const isMediaSite = 
+      url.includes('imgur.com') || 
+      url.includes('youtube.com') || 
+      url.includes('youtu.be') ||
+      url.includes('i.redd.it') ||
+      url.includes('v.redd.it') ||
+      url.includes('gfycat.com') ||
+      url.includes('giphy.com')
+    
+    if (isMediaSite) {
+      // Open media links in a modal
+      setExternalModal({ isOpen: true, url })
       return
     }
-
-    // Always open in the app now
-    setIsForumFullView(true)
+    
+    // Handle forum links as before
+    if (isShiftClick) {
+      setIsForumModalOpen(true)
+    } else {
+      setActiveTab('forum')
+    }
+    
+    if (forumWebviewRef.current) {
+      forumWebviewRef.current.loadURL(url)
+    }
   }
 
   // Check if API key is set
@@ -812,6 +873,31 @@ function AppContent() {
     }
   }, [addToast])
 
+  // Add this useEffect to listen for IPC messages
+  useEffect(() => {
+    // Listen for external modal requests from the main process
+    const handleExternalModal = (_, url) => {
+      setExternalModal({ isOpen: true, url })
+    }
+
+    // Add the event listener
+    if (window.electronAPI && window.electronAPI.ipcRenderer) {
+      window.electronAPI.ipcRenderer.on('open-external-modal', handleExternalModal)
+    }
+
+    // Clean up
+    return () => {
+      if (window.electronAPI && window.electronAPI.ipcRenderer) {
+        window.electronAPI.ipcRenderer.removeListener('open-external-modal', handleExternalModal)
+      }
+    }
+  }, [])
+
+  // Add this function to handle closing the external modal
+  const closeExternalModal = () => {
+    setExternalModal({ isOpen: false, url: null })
+  }
+
   // Render the main app content
   return (
     <div className="flex flex-col h-screen bg-light-200 dark:bg-dark-300 text-gray-800 dark:text-gray-200">
@@ -842,7 +928,10 @@ function AppContent() {
         >
           {/* Fixed Title Bar */}
           <div className="fixed top-0 left-0 right-0 h-8 bg-light-300 dark:bg-dark-300 flex items-center justify-between px-4 select-none drag z-50">
-            <div className="text-gray-600 dark:text-gray-400 text-sm">Fantasy.Comet</div>
+            <div className="text-gray-600 dark:text-gray-400 text-sm flex items-center">
+              <img src={appIcon} alt="Fantasy Comet" className="w-4 h-4 mr-2" />
+              Fantasy.Comet
+            </div>
             <div className="flex items-center space-x-2 no-drag">
               <motion.button
                 whileHover={{ backgroundColor: '#2c2e33' }}
@@ -1097,6 +1186,44 @@ function AppContent() {
               />
             )}
           </AnimatePresence>
+
+          {/* External Modal */}
+          {externalModal.isOpen && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center"
+              onClick={closeExternalModal}
+            >
+              <motion.div
+                initial={{ scale: 0.95, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.95, opacity: 0 }}
+                className="bg-light-100 dark:bg-dark-200 w-[90%] h-[90%] max-w-5xl rounded-xl shadow-xl overflow-hidden relative"
+                onClick={e => e.stopPropagation()}
+              >
+                <div className="absolute top-4 right-4 z-10">
+                  <button
+                    onClick={closeExternalModal}
+                    className="p-2 rounded-lg bg-light-200/50 dark:bg-dark-300/50 hover:bg-light-200 dark:hover:bg-dark-300 transition-colors"
+                  >
+                    <XMarkIcon className="w-6 h-6 text-gray-700 dark:text-gray-200" />
+                  </button>
+                </div>
+                
+                <div className="w-full h-full">
+                  <webview
+                    src={externalModal.url}
+                    className="w-full h-full"
+                    allowpopups="true"
+                    webpreferences="contextIsolation=true"
+                    useragent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"
+                  />
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
         </motion.div>
       )}
     </div>

@@ -29,6 +29,14 @@ function Settings() {
     const config = window.electronAPI.getConfig()
     return config.sidebarCollapsed || false
   })
+  const [smoothScrolling, setSmoothScrolling] = useState(() => {
+    const config = window.electronAPI.getConfig()
+    return config.smoothScrolling !== undefined ? config.smoothScrolling : true
+  })
+  const [smoothScrollingSpeed, setSmoothScrollingSpeed] = useState(() => {
+    const config = window.electronAPI.getConfig()
+    return config.smoothScrollingSpeed !== undefined ? config.smoothScrollingSpeed : 0.6
+  })
   const [apiKey, setApiKey] = useState(() => {
     return window.electronAPI.getApiKey() || ''
   })
@@ -104,6 +112,20 @@ function Settings() {
       `Sidebar will be ${collapsed ? 'collapsed' : 'expanded'} on next startup`,
       'info'
     )
+  }
+
+  const handleSmoothScrollingChange = (enabled) => {
+    setSmoothScrolling(enabled)
+    window.electronAPI.saveConfig({ smoothScrolling: enabled })
+    addToast(
+      `Smooth scrolling ${enabled ? 'enabled' : 'disabled'}`,
+      'info'
+    )
+  }
+
+  const handleSmoothScrollingSpeedChange = (speed) => {
+    setSmoothScrollingSpeed(speed)
+    window.electronAPI.saveConfig({ smoothScrollingSpeed: speed })
   }
 
   const handleColorPaletteChange = (paletteId) => {
@@ -409,6 +431,57 @@ function Settings() {
               />
             </div>
           </div>
+
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5 text-gray-600 dark:text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122" />
+              </svg>
+              <span className="text-gray-600 dark:text-gray-400">Smooth Scrolling</span>
+            </div>
+            <div
+              role="button"
+              tabIndex={0}
+              onClick={() => handleSmoothScrollingChange(!smoothScrolling)}
+              onKeyDown={(e) => e.key === 'Enter' && handleSmoothScrollingChange(!smoothScrolling)}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none cursor-pointer ${
+                smoothScrolling ? 'bg-primary' : 'bg-gray-400'
+              }`}
+            >
+              <span
+                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-200 ease-in-out ${
+                  smoothScrolling ? 'translate-x-6' : 'translate-x-1'
+                }`}
+              />
+            </div>
+          </div>
+
+          {smoothScrolling && (
+            <div className="ml-7 mt-2 mb-3">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-xs text-gray-500 dark:text-gray-400">Scrolling Speed</span>
+                <span className="text-xs font-medium text-gray-600 dark:text-gray-300">
+                  {smoothScrollingSpeed === 0.2 ? 'Slow' : 
+                   smoothScrollingSpeed === 0.6 ? 'Medium' : 
+                   smoothScrollingSpeed === 1.0 ? 'Fast' : 
+                   smoothScrollingSpeed.toFixed(1)}
+                </span>
+              </div>
+              <div className="flex items-center space-x-2">
+                <span className="text-xs text-gray-500 dark:text-gray-400">Slow</span>
+                <input
+                  type="range"
+                  min="0.2"
+                  max="1.0"
+                  step="0.1"
+                  value={smoothScrollingSpeed}
+                  onChange={(e) => handleSmoothScrollingSpeedChange(parseFloat(e.target.value))}
+                  className="w-full h-2 bg-light-300 dark:bg-dark-300 rounded-lg appearance-none cursor-pointer accent-primary"
+                />
+                <span className="text-xs text-gray-500 dark:text-gray-400">Fast</span>
+              </div>
+            </div>
+          )}
         </div>
       </motion.div>
 

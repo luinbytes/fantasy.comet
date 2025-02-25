@@ -1,8 +1,9 @@
-const { app, BrowserWindow, ipcMain, Notification, session } = require('electron')
+const { app, BrowserWindow, ipcMain, Notification, session, shell, dialog } = require('electron')
 const path = require('path')
 const fs = require('fs')
 const os = require('os')
 const { version } = require('./package.json')
+const { autoUpdater } = require('electron-updater')
 
 // Config setup
 const configDir = path.join(process.env.APPDATA || (process.platform === 'darwin' ? 
@@ -56,20 +57,38 @@ function createWindow() {
   forumSession.setUserAgent(`Fantasy.Comet/${version} (Electron)`)
 
   win = new BrowserWindow({
-    width: 1200,
+    width: 1280,
     height: 800,
+    minWidth: 800,
+    minHeight: 600,
+    frame: false,
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
       preload: path.join(__dirname, 'preload.js'),
-      sandbox: false,
-      webSecurity: true,
-      partition: 'persist:forum',
-      webviewTag: true
+      webviewTag: true,
+      spellcheck: true,
+      sandbox: false
     },
-    frame: false,
-    backgroundColor: '#18191c'
+    icon: path.join(__dirname, 'assets', 'icons', process.platform === 'win32' ? 'icon.ico' : 'icon.png')
   })
+
+  // Copy icon to dist folder for use in the app
+  const iconSrc = path.join(__dirname, 'assets', 'icons', 'icon.png')
+  const iconDest = path.join(__dirname, 'dist', 'assets', 'icons', 'icon.png')
+  
+  try {
+    // Ensure the directory exists
+    if (!fs.existsSync(path.join(__dirname, 'dist', 'assets', 'icons'))) {
+      fs.mkdirSync(path.join(__dirname, 'dist', 'assets', 'icons'), { recursive: true })
+    }
+    
+    // Copy the file
+    fs.copyFileSync(iconSrc, iconDest)
+    console.log('Icon copied successfully')
+  } catch (err) {
+    console.error('Error copying icon:', err)
+  }
 
   // Set initial zoom level from config
   const config = loadConfig()
@@ -86,15 +105,15 @@ function createWindow() {
       responseHeaders: {
         ...details.responseHeaders,
         'Content-Security-Policy': [
-          "default-src 'self' 'unsafe-inline' 'unsafe-eval' https://constelia.ai https://www.youtube.com https://youtube.com https://*.youtube.com https://*.googlevideo.com https://*.google.com https://*.gstatic.com https://*.doubleclick.net;",
-          "connect-src 'self' https://constelia.ai https://api.github.com https://*.youtube.com https://*.googlevideo.com https://*.google.com https://*.gstatic.com https://*.doubleclick.net;",
-          "frame-src 'self' https://constelia.ai https://www.youtube.com https://youtube.com https://*.youtube.com https://youtube-nocookie.com;",
+          "default-src 'self' 'unsafe-inline' 'unsafe-eval' https://constelia.ai https://www.youtube.com https://youtube.com https://*.youtube.com https://*.googlevideo.com https://*.google.com https://*.gstatic.com https://*.doubleclick.net https://*.imgur.com https://imgur.com https://www.googletagmanager.com https://ced.sascdn.com https://ced-ns.sascdn.com https://d3c8j8snkzfr1n.cloudfront.net https://js.assemblyexchange.com https://quicklyedit.com https://www.google-analytics.com https://btloader.com;",
+          "connect-src 'self' https://constelia.ai https://api.github.com https://*.youtube.com https://*.googlevideo.com https://*.google.com https://*.gstatic.com https://*.doubleclick.net https://*.imgur.com https://imgur.com https://www.googletagmanager.com https://ced.sascdn.com https://ced-ns.sascdn.com https://d3c8j8snkzfr1n.cloudfront.net https://js.assemblyexchange.com https://quicklyedit.com https://www.google-analytics.com https://btloader.com;",
+          "frame-src 'self' https://constelia.ai https://www.youtube.com https://youtube.com https://*.youtube.com https://youtube-nocookie.com https://*.imgur.com https://imgur.com;",
           "img-src 'self' https://constelia.ai data: https: blob:;",
-          "media-src 'self' https://www.youtube.com https://youtube.com https://*.youtube.com https://*.googlevideo.com blob:;",
-          "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://constelia.ai https://www.youtube.com https://*.youtube.com https://*.google.com https://*.gstatic.com https://*.doubleclick.net;",
-          "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://constelia.ai;",
-          "font-src 'self' https://fonts.gstatic.com https://constelia.ai;",
-          "child-src 'self' https://constelia.ai https://www.youtube.com https://youtube.com https://*.youtube.com blob:;"
+          "media-src 'self' https://www.youtube.com https://youtube.com https://*.youtube.com https://*.googlevideo.com https://*.imgur.com https://imgur.com blob:;",
+          "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://constelia.ai https://www.youtube.com https://*.youtube.com https://*.google.com https://*.gstatic.com https://*.doubleclick.net https://*.imgur.com https://imgur.com https://www.googletagmanager.com https://ced.sascdn.com https://ced-ns.sascdn.com https://d3c8j8snkzfr1n.cloudfront.net https://js.assemblyexchange.com https://quicklyedit.com https://www.google-analytics.com https://btloader.com;",
+          "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://constelia.ai https://*.imgur.com https://imgur.com;",
+          "font-src 'self' https://fonts.gstatic.com https://constelia.ai https://*.imgur.com https://imgur.com;",
+          "child-src 'self' https://constelia.ai https://www.youtube.com https://youtube.com https://*.youtube.com https://*.imgur.com https://imgur.com blob:;"
         ].join('; ')
       }
     })
@@ -156,13 +175,27 @@ ipcMain.on('show-notification', (_, { title, body }) => {
       new Notification({
         title: title || app.name,
         body,
-        icon: path.join(__dirname, 'assets', 'icon.png'),
+        icon: path.join(__dirname, 'assets', 'icons', 'icon.png'),
         silent: false,
         appName: app.name
       }).show()
     }
   } catch (error) {
     console.error(`[ERROR] Failed to show notification: ${error.message}`)
+  }
+})
+
+// Handle external modal requests
+ipcMain.on('open-external-modal', (_, url) => {
+  if (!win) return
+  
+  try {
+    // Forward the message to the renderer process
+    win.webContents.send('open-external-modal', url)
+  } catch (error) {
+    console.error(`[ERROR] Failed to open external modal: ${error.message}`)
+    // Fallback to opening in external browser if modal fails
+    shell.openExternal(url)
   }
 })
 

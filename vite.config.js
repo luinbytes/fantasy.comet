@@ -11,7 +11,7 @@ export default defineConfig({
       transformMixedEsModules: true
     },
     rollupOptions: {
-      external: ['electron']
+      external: ['electron', 'os', 'fs', 'path', 'events', 'child_process', 'crypto', 'http', 'buffer', 'url', 'stream']
     }
   },
   resolve: {
