@@ -43,14 +43,15 @@ import type { JSX } from "react/jsx-runtime"
 const API_BASE_URL = "https://constelia.ai/api.php"
 
 interface ConfigDashboardProps {
-  apiKey: string
+  apiKey: string;
+  handleApiRequest: (params: Record<string, string>, options?: RequestInit) => Promise<string | null>;
 }
 
 interface ConfigData {
   [key: string]: any
 }
 
-export function ConfigDashboard({ apiKey }: ConfigDashboardProps) {
+export function ConfigDashboard({ apiKey, handleApiRequest }: ConfigDashboardProps) {
   const [config, setConfig] = useState<ConfigData | null>(null)
   const [rawConfig, setRawConfig] = useState<string>("")
   const [loading, setLoading] = useState(true)
@@ -61,32 +62,12 @@ export function ConfigDashboard({ apiKey }: ConfigDashboardProps) {
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set())
   const { toast } = useToast()
 
-  // Generic API handler to reduce duplication and improve error handling.
-  const handleApiRequest = useCallback(async (cmd: string, options: RequestInit = {}) => {
-    if (!apiKey) return null
-
-    const url = `${API_BASE_URL}?key=${encodeURIComponent(apiKey)}&cmd=${encodeURIComponent(cmd)}`
-
-    try {
-      const res = await fetch(url, options)
-      const responseText = await res.text()
-
-      if (!res.ok) {
-        throw new Error(responseText || `HTTP ${res.status}`)
-      }
-      return responseText
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : "An unknown error occurred."
-      setError(errorMessage)
-      toast({ title: "API Error", description: errorMessage, variant: "destructive" })
-      return null
-    }
-  }, [apiKey, toast])
+  
 
   const fetchConfig = useCallback(async () => {
     setLoading(true)
     setError(null)
-    const responseText = await handleApiRequest("getConfiguration")
+    const responseText = await handleApiRequest({ cmd: "getConfiguration" });
     if (responseText !== null) {
       setRawConfig(responseText)
       try {
@@ -100,11 +81,14 @@ export function ConfigDashboard({ apiKey }: ConfigDashboardProps) {
 
   const saveConfig = async (configData: string) => {
     setSaving(true)
-    const result = await handleApiRequest("setConfiguration", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: `value=${encodeURIComponent(configData)}`,
-    })
+    const result = await handleApiRequest(
+      { cmd: "setConfiguration" },
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: `value=${encodeURIComponent(configData)}`,
+      }
+    )
     setSaving(false)
 
     if (result !== null) {
@@ -151,7 +135,14 @@ export function ConfigDashboard({ apiKey }: ConfigDashboardProps) {
     for (let i = 0; i < path.length - 1; i++) {
       current = current[path[i]]
     }
-    current[path[path.length - 1]] = value
+
+    const lastKey = path[path.length - 1];
+    // Special handling for array of numbers (like 'bones')
+    if (Array.isArray(current[lastKey]) && typeof value === 'string') {
+      current[lastKey] = value.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n));
+    } else {
+      current[lastKey] = value
+    }
 
     setConfig(newConfig)
     setRawConfig(JSON.stringify(newConfig, null, 2))
@@ -159,6 +150,8 @@ export function ConfigDashboard({ apiKey }: ConfigDashboardProps) {
 
   const renderConfigValue = (value: any, path: string[]): JSX.Element => {
     const key = path.join('-')
+    const settingName = path[path.length - 1]; // Get the actual setting name
+
     if (typeof value === "boolean") {
       return <Switch key={key} checked={value} onCheckedChange={(checked) => updateConfigValue(path, checked)} />
     }
@@ -166,13 +159,24 @@ export function ConfigDashboard({ apiKey }: ConfigDashboardProps) {
       return <Input key={key} type="number" value={value} onChange={(e) => updateConfigValue(path, parseFloat(e.target.value) || 0)} className="bg-gray-800 border-gray-700 text-gray-100 w-32" />
     }
     if (typeof value === "string") {
+      // Heuristic for color strings
+      if (settingName.includes("color") && value.match(/^[0-9A-Fa-f]{6,8}$/)) {
+        // This is a basic text input for hex colors. A proper color picker would be ideal.
+        return <Input key={key} value={value} onChange={(e) => updateConfigValue(path, e.target.value)} className="bg-gray-800 border-gray-700 text-gray-100" />
+      }
+      // For other strings, including toggle_key
       return <Input key={key} value={value} onChange={(e) => updateConfigValue(path, e.target.value)} className="bg-gray-800 border-gray-700 text-gray-100" />
     }
     if (Array.isArray(value)) {
+      // Assuming arrays are arrays of numbers for now (like 'bones')
+      // Render as a comma-separated string in a textarea for editing
       return (
-        <div key={key} className="space-y-1">
-          {value.map((item, index) => <Badge key={index} variant="outline" className="border-gray-600 text-gray-300 mr-1">{item}</Badge>)}
-        </div>
+        <Textarea
+          key={key}
+          value={value.join(', ')}
+          onChange={(e) => updateConfigValue(path, e.target.value)}
+          className="bg-gray-800 border-gray-700 text-gray-100 min-h-[40px]"
+        />
       )
     }
     return <span key={key} className="text-gray-400 text-sm">Complex object</span>
@@ -225,11 +229,14 @@ export function ConfigDashboard({ apiKey }: ConfigDashboardProps) {
                       </CollapsibleTrigger>
                       <CollapsibleContent><CardContent className="pt-0"><div className="space-y-4">
                         {Object.entries(content).map(([scriptName, scriptConfig]) => (
-                          <div key={scriptName} className="border border-gray-800 rounded-lg p-4">
-                            <h4 className="font-medium text-gray-200 mb-3">{scriptName}</h4>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div key={scriptName} className="border border-gray-800 rounded-lg p-4 bg-gray-900">
+                            <h3 className="text-lg font-semibold text-gray-100 mb-4">{scriptName}</h3>
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                               {Object.entries(scriptConfig as object).map(([key, value]) => (
-                                <div key={key} className="space-y-2"><Label className="text-sm text-gray-400">{key}</Label>{renderConfigValue(value, [software, scriptName, key])}</div>
+                                <div key={key} className="p-3 rounded-md border border-gray-700 bg-gray-850 space-y-2">
+                                  <Label className="text-sm font-medium text-gray-300">{key}</Label>
+                                  {renderConfigValue(value, [software, scriptName, key])}
+                                </div>
                               ))}
                             </div>
                           </div>

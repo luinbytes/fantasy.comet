@@ -22,7 +22,8 @@ interface ApiMethod {
 }
 
 interface ApiTestDashboardProps {
-  apiKey: string
+  apiKey: string;
+  handleApiRequest: (params: Record<string, string>) => Promise<string | null>;
 }
 
 interface TestResult {
@@ -39,7 +40,7 @@ interface TestResult {
 
 const API_BASE_URL = "https://constelia.ai/api.php"
 
-export function ApiTestDashboard({ apiKey }: ApiTestDashboardProps) {
+export function ApiTestDashboard({ apiKey, handleApiRequest }: ApiTestDashboardProps) {
   const [selectedMethod, setSelectedMethod] = useState<ApiMethod | null>(null)
   const [methodParams, setMethodParams] = useState<Record<string, string>>({})
   const [testResults, setTestResults] = useState<TestResult[]>([])
@@ -63,67 +64,60 @@ export function ApiTestDashboard({ apiKey }: ApiTestDashboardProps) {
     setLoading(true)
     const testId = Date.now().toString()
 
-    // Using URLSearchParams for safer and cleaner URL construction.
-    const params = new URLSearchParams({ key: apiKey, cmd: method.name })
+    const params: Record<string, string> = { cmd: method.name };
     Object.entries(methodParams).forEach(([key, value]) => {
       if (value.trim()) {
-        params.append(key, value)
+        params[key] = value;
       }
-    })
-    const url = `${API_BASE_URL}?${params.toString()}`
+    });
 
-    try {
-      const res = await fetch(url)
-      const responseText = await res.text()
+    const result = await handleApiRequest(params);
 
-      // Improved handling of HTML-wrapped responses.
-      let cleanedResponse = responseText.trim()
-      if (cleanedResponse.startsWith("<pre>")) {
-        cleanedResponse = cleanedResponse.substring(5, cleanedResponse.length - 6).trim()
-      }
-
-      let parsedResponse
+    if (result) {
       try {
-        parsedResponse = JSON.parse(cleanedResponse)
-      } catch {
-        parsedResponse = cleanedResponse
+        const parsedResponse = JSON.parse(result);
+        const testResult: TestResult = {
+          id: testId,
+          method: method.name,
+          url: "", // URL is now handled by handleApiRequest
+          params: methodParams,
+          response: parsedResponse,
+          status: 200, // Assuming 200 for successful parse
+          timestamp: new Date(),
+          success: true,
+          error: undefined,
+        };
+        setTestResults((prev) => [testResult, ...prev]);
+      } catch (e) {
+        const testResult: TestResult = {
+          id: testId,
+          method: method.name,
+          url: "", // URL is now handled by handleApiRequest
+          params: methodParams,
+          response: result,
+          status: 200, // Still consider it a success if it's just text
+          timestamp: new Date(),
+          success: true,
+          error: undefined,
+        };
+        setTestResults((prev) => [testResult, ...prev]);
       }
-
-      const result: TestResult = {
+    } else {
+      const testResult: TestResult = {
         id: testId,
         method: method.name,
-        url,
-        params: methodParams,
-        response: parsedResponse,
-        status: res.status,
-        timestamp: new Date(),
-        success: res.ok,
-        error: res.ok ? undefined : `HTTP ${res.status}: ${cleanedResponse}`,
-      }
-
-      setTestResults((prev) => [result, ...prev])
-
-      // Smooth scroll to results.
-      document.getElementById("test-results")?.scrollIntoView({ behavior: "smooth" })
-
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Network error"
-      const result: TestResult = {
-        id: testId,
-        method: method.name,
-        url,
+        url: "", // URL is now handled by handleApiRequest
         params: methodParams,
         response: null,
         status: 0,
         timestamp: new Date(),
         success: false,
-        error: errorMessage,
-      }
-      setTestResults((prev) => [result, ...prev])
-      toast({ title: "Request Failed", description: errorMessage, variant: "destructive" })
-    } finally {
-      setLoading(false)
+        error: "API call failed or returned no data.",
+      };
+      setTestResults((prev) => [testResult, ...prev]);
+      toast({ title: "Request Failed", description: "API call failed or returned no data.", variant: "destructive" });
     }
+    setLoading(false);
   }
 
   const handleMethodSelect = (method: ApiMethod) => {

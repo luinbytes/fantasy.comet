@@ -1,4 +1,5 @@
 "use client"
+
 import { Button } from "@/components/ui/button"
 import {
   Code,
@@ -11,15 +12,13 @@ import {
   Folder,
   Upload,
   Server,
-  Languages,
   Terminal,
   LucideProps,
 } from "lucide-react"
 import React from "react"
-import { categorySettings } from "@/lib/category-settings"
 import { ClientLucideIcon } from "./client-lucide-icon"
 
-interface NavigationProps {
+interface SidebarProps {
   activeCategory: string
   onCategoryChange: (category: string) => void
 }
@@ -41,12 +40,11 @@ const categories: { id: string; label: string; icon: LucideIcon }[] = [
   { id: "test", label: "API Test", icon: Terminal },
 ]
 
-export function Navigation({ activeCategory, onCategoryChange }: NavigationProps) {
+export function Sidebar({ activeCategory, onCategoryChange }: SidebarProps) {
   return (
-    <nav className="flex flex-wrap gap-3">
+    <nav className="space-y-1">
       {categories.map((category) => {
         const Icon = category.icon
-
         const isActive = activeCategory === category.id
 
         return (
@@ -55,9 +53,10 @@ export function Navigation({ activeCategory, onCategoryChange }: NavigationProps
             variant={isActive ? "default" : "ghost"}
             size="sm"
             onClick={() => onCategoryChange(category.id)}
-            className={`flex items-center gap-2 px-4 py-2 h-9 ${
-              isActive
-                ? `${categorySettings[category.id]?.color || "bg-gray-600"} text-white hover:opacity-90`
+            className={`w-full justify-start flex items-center gap-2 px-4 py-2 h-9 ${""
+              // Use theme accent color for active state
+              }${isActive
+                ? `bg-accent text-accent-foreground hover:opacity-90`
                 : "text-gray-300 hover:text-white hover:bg-gray-800"
             }`}
           >

@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Key, AlertCircle, User, Loader2, Eye, EyeOff } from "lucide-react"
-import { Navigation } from "@/components/navigation"
+import { Sidebar } from "@/components/sidebar"
 import { UserInfoDisplay } from "@/components/user-info-display"
 import { UserInfoSkeleton } from "@/components/user-info-skeleton"
 import { SoftwareDashboard } from "@/components/software-dashboard"
@@ -70,8 +70,19 @@ export default function ConstellaControlApp() {
   }, [])
 
   // Centralized API request handler for consistency.
+  const API_KEY_REGEX = /^[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/;
+
   const handleApiRequest = useCallback(async (params: Record<string, string>) => {
-    if (!apiKey) return null
+    if (!apiKey) {
+      console.log("handleApiRequest: No API key, returning null.");
+      return null;
+    }
+    if (!API_KEY_REGEX.test(apiKey)) {
+      console.log("handleApiRequest: Invalid API key format, returning null.");
+      toast({ title: "API Key Format Error", description: "API Key must be in the format ABCD-EFGH-IJLK-MNLO.", variant: "destructive" });
+      return null;
+    }
+    console.log("handleApiRequest: Valid API key, proceeding with request.");
     const urlParams = new URLSearchParams({ key: apiKey, ...params })
     const url = `${API_BASE_URL}?${urlParams.toString()}`
 
@@ -90,10 +101,18 @@ export default function ConstellaControlApp() {
   }, [apiKey, toast])
 
   const fetchUserInfo = useCallback(async () => {
-    if (!apiKey || apiKey.length < 10) {
-      setUserInfo(null)
-      return
+    if (!apiKey) {
+      console.log("fetchUserInfo: No API key, returning.");
+      setUserInfo(null);
+      return;
     }
+    if (!API_KEY_REGEX.test(apiKey)) {
+      console.log("fetchUserInfo: Invalid API key format, returning.");
+      setUserInfo(null);
+      toast({ title: "API Key Format Error", description: "API Key must be in the format ABCD-EFGH-IJLK-MNLO.", variant: "destructive" });
+      return;
+    }
+    console.log("fetchUserInfo: Valid API key, proceeding to fetch.");
     setLoadingUserInfo(true)
     const result = await handleApiRequest({ cmd: "getMember", flags: "scripts&xp&beautify&bans&rolls&uploads&bonks" })
     if (result) {
@@ -126,15 +145,14 @@ export default function ConstellaControlApp() {
 
   const renderDashboard = () => {
     switch (activeCategory) {
-      case "scripts": return <ScriptsDashboard apiKey={apiKey} />
-      case "member": return <MemberDashboard apiKey={apiKey} steamAccounts={userInfo?.steam} isBuddyModeEnabled={isBuddyModeEnabled} keyLink={userInfo?.key_link} keyStop={userInfo?.key_stop} bans={userInfo?.bans} rolls={userInfo?.rolls} uploads={userInfo?.uploads} bonks={userInfo?.bonks} />
-      case "software": return <SoftwareDashboard apiKey={apiKey} />
-      case "config": return <ConfigDashboard apiKey={apiKey} />
-      case "forum": return <ForumDashboard apiKey={apiKey} />
-      case "perks": return <PerksDashboard apiKey={apiKey} />
-      case "test": return <ApiTestDashboard apiKey={apiKey} />
-      case "test": return <ApiTestDashboard apiKey={apiKey} />
-      case "settings": return <SettingsDashboard onBuddyToggle={setIsBuddyModeEnabled} />
+      case "scripts": return <ScriptsDashboard apiKey={apiKey} handleApiRequest={handleApiRequest} isActive={activeCategory === "scripts"} />
+      case "member": return <MemberDashboard apiKey={apiKey} steamAccounts={userInfo?.steam} isBuddyModeEnabled={isBuddyModeEnabled} keyLink={userInfo?.key_link} keyStop={userInfo?.key_stop} bans={userInfo?.bans} rolls={userInfo?.rolls} uploads={userInfo?.uploads} bonks={userInfo?.bonks} handleApiRequest={handleApiRequest} />
+      case "software": return <SoftwareDashboard apiKey={apiKey} handleApiRequest={handleApiRequest} />
+      case "config": return <ConfigDashboard apiKey={apiKey} handleApiRequest={handleApiRequest} />
+      case "forum": return <ForumDashboard apiKey={apiKey} handleApiRequest={handleApiRequest} />
+      case "perks": return <PerksDashboard apiKey={apiKey} handleApiRequest={handleApiRequest} />
+      case "test": return <ApiTestDashboard apiKey={apiKey} handleApiRequest={handleApiRequest} />
+      case "settings": return <SettingsDashboard onBuddyToggle={setIsBuddyModeEnabled} handleApiRequest={handleApiRequest} />
       default: return <Card className="bg-gray-900 border-gray-800"><CardContent className="pt-6"><p className="text-center text-gray-400">Dashboard for {activeCategory} coming soon!</p></CardContent></Card>
     }
   }
@@ -148,16 +166,17 @@ export default function ConstellaControlApp() {
           </h1>
           <p className="text-gray-400 mt-2">Unlock your gaming potential! Explore powerful tools, enhance your gameplay, and dominate the competition.</p>
         </div>
-        <Card className="bg-gray-900 border-gray-800 mb-8">
-          <CardHeader>
-            <CardTitle className="text-lg font-semibold text-gray-200">Categories</CardTitle>
-          </CardHeader>
-          <CardContent className="p-6">
-            <Navigation activeCategory={activeCategory} onCategoryChange={setActiveCategory} />
-          </CardContent>
-        </Card>
+        
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
           <aside className="lg:col-span-1 space-y-6">
+            <Card className="bg-gray-900 border-gray-800">
+              <CardHeader>
+                <CardTitle className="text-lg font-semibold text-gray-200">Categories</CardTitle>
+              </CardHeader>
+              <CardContent className="p-6">
+                <Sidebar activeCategory={activeCategory} onCategoryChange={setActiveCategory} />
+              </CardContent>
+            </Card>
             {userInfo ? (
               <UserInfoDisplay userInfo={userInfo} apiKey={apiKey} handleApiRequest={handleApiRequest} />
             ) : loadingUserInfo ? (

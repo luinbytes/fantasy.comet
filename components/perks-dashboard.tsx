@@ -41,12 +41,13 @@ interface VenusStatus {
 }
 
 interface PerksDashboardProps {
-  apiKey: string
+  apiKey: string;
+  handleApiRequest: (params: Record<string, string>) => Promise<string | null>;
 }
 
 const API_BASE_URL = "https://constelia.ai/api.php"
 
-export function PerksDashboard({ apiKey }: PerksDashboardProps) {
+export function PerksDashboard({ apiKey, handleApiRequest }: PerksDashboardProps) {
   const [perks, setPerks] = useState<Perk[]>([])
   const [divinityChart, setDivinityChart] = useState<DivinityChart | null>(null)
   const [venusStatus, setVenusStatus] = useState<VenusStatus | null>(null)
@@ -57,25 +58,7 @@ export function PerksDashboard({ apiKey }: PerksDashboardProps) {
   const [lootResult, setLootResult] = useState<any>(null)
   const { toast } = useToast()
 
-  // Centralized API request handler for consistency and robustness.
-  const handleApiRequest = useCallback(async (params: Record<string, string>) => {
-    if (!apiKey) return null
-    const urlParams = new URLSearchParams({ key: apiKey, ...params })
-    const url = `${API_BASE_URL}?${urlParams.toString()}`
-
-    try {
-      const res = await fetch(url)
-      const responseText = await res.text()
-      if (!res.ok) throw new Error(responseText || `HTTP ${res.status}`)
-      
-      const preMatch = responseText.match(/<pre>([\s\S]*?)<\/pre>/)
-      return preMatch ? preMatch[1].trim() : responseText.trim()
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : "An unknown error occurred."
-      toast({ title: "API Error", description: errorMessage, variant: "destructive" })
-      return null
-    }
-  }, [apiKey, toast])
+  
 
   const fetchPerks = useCallback(async () => {
     setLoading(true)

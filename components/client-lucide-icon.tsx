@@ -18,5 +18,5 @@ export function ClientLucideIcon({ icon: Icon, ...props }: ClientLucideIconProps
     return null; // Render nothing on the server
   }
 
-  return <Icon {...props} />;
+  return <Icon {...props} suppressHydrationWarning />
 }

@@ -18,12 +18,13 @@ interface Software {
 }
 
 interface SoftwareDashboardProps {
-  apiKey: string
+  apiKey: string;
+  handleApiRequest: (params: Record<string, string>) => Promise<string | null>;
 }
 
 const API_BASE_URL = "https://constelia.ai/api.php"
 
-export function SoftwareDashboard({ apiKey }: SoftwareDashboardProps) {
+export function SoftwareDashboard({ apiKey, handleApiRequest }: SoftwareDashboardProps) {
   const [software, setSoftware] = useState<Software[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -31,26 +32,7 @@ export function SoftwareDashboard({ apiKey }: SoftwareDashboardProps) {
   const [isInfoModalOpen, setIsInfoModalOpen] = useState(false)
   const [selectedSoftwareName, setSelectedSoftwareName] = useState<string | null>(null)
 
-  // Centralized API request handler for consistency.
-  const handleApiRequest = useCallback(async (params: Record<string, string>) => {
-    if (!apiKey) return null
-    const urlParams = new URLSearchParams({ key: apiKey, ...params })
-    const url = `${API_BASE_URL}?${urlParams.toString()}`
-
-    try {
-      const res = await fetch(url)
-      const responseText = await res.text()
-      if (!res.ok) throw new Error(responseText || `HTTP ${res.status}`)
-      
-      const preMatch = responseText.match(/<pre>([\s\S]*?)<\/pre>/)
-      return preMatch ? preMatch[1].trim() : responseText.trim()
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : "An unknown error occurred."
-      setError(errorMessage)
-      toast({ title: "API Error", description: errorMessage, variant: "destructive" })
-      return null
-    }
-  }, [apiKey, toast])
+  
 
   const fetchSoftware = useCallback(async () => {
     setLoading(true)

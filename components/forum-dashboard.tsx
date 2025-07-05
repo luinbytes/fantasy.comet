@@ -23,12 +23,13 @@ interface ForumPost {
 }
 
 interface ForumDashboardProps {
-  apiKey: string
+  apiKey: string;
+  handleApiRequest: (params: Record<string, string>) => Promise<string | null>;
 }
 
 const API_BASE_URL = "https://constelia.ai/api.php"
 
-export function ForumDashboard({ apiKey }: ForumDashboardProps) {
+export function ForumDashboard({ apiKey, handleApiRequest }: ForumDashboardProps) {
   const [posts, setPosts] = useState<ForumPost[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -38,27 +39,7 @@ export function ForumDashboard({ apiKey }: ForumDashboardProps) {
   const [commandLoading, setCommandLoading] = useState(false)
   const { toast } = useToast()
 
-  // Centralized API request handler for consistency.
-  const handleApiRequest = useCallback(async (params: Record<string, string>) => {
-    if (!apiKey) return null
-    const urlParams = new URLSearchParams({ key: apiKey, ...params })
-    const url = `${API_BASE_URL}?${urlParams.toString()}`
-
-    try {
-      const res = await fetch(url)
-      const responseText = await res.text()
-      if (!res.ok) throw new Error(responseText || `HTTP ${res.status}`)
-      
-      // Clean potential HTML wrapping from the response.
-      const preMatch = responseText.match(/<pre>([\s\S]*?)<\/pre>/)
-      return preMatch ? preMatch[1].trim() : responseText.trim()
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : "An unknown error occurred."
-      setError(errorMessage)
-      toast({ title: "API Error", description: errorMessage, variant: "destructive" })
-      return null
-    }
-  }, [apiKey, toast])
+  
 
   const fetchForumPosts = useCallback(async () => {
     setLoading(true)

@@ -16,10 +16,11 @@ import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
 
 interface SoftwareInfoDialogProps {
-  isOpen: boolean
-  onClose: () => void
-  softwareName: string | null
-  apiKey: string
+  isOpen: boolean;
+  onClose: () => void;
+  softwareName: string | null;
+  apiKey: string;
+  handleApiRequest: (params: Record<string, string>) => Promise<string | null>;
 }
 
 interface SoftwareDetails {
@@ -43,31 +44,13 @@ interface Script {
 
 const API_BASE_URL = "https://constelia.ai/api.php"
 
-export function SoftwareInfoDialog({ isOpen, onClose, softwareName, apiKey }: SoftwareInfoDialogProps) {
+export function SoftwareInfoDialog({ isOpen, onClose, softwareName, apiKey, handleApiRequest }: SoftwareInfoDialogProps) {
   const [softwareDetails, setSoftwareDetails] = useState<SoftwareDetails | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const { toast } = useToast()
 
-  const handleApiRequest = useCallback(async (params: Record<string, string>) => {
-    if (!apiKey) return null
-    const urlParams = new URLSearchParams({ key: apiKey, ...params })
-    const url = `${API_BASE_URL}?${urlParams.toString()}`
-
-    try {
-      const res = await fetch(url)
-      const responseText = await res.text()
-      if (!res.ok) throw new Error(responseText || `HTTP ${res.status}`)
-      
-      const preMatch = responseText.match(/<pre>([\s\S]*?)<\/pre>/)
-      return preMatch ? preMatch[1].trim() : responseText.trim()
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : "An unknown error occurred."
-      setError(errorMessage)
-      toast({ title: "API Error", description: errorMessage, variant: "destructive" })
-      return null
-    }
-  }, [apiKey, toast])
+  
 
   const fetchSoftwareDetails = useCallback(async () => {
     if (!softwareName) return

@@ -13,15 +13,16 @@ import { useToast } from "@/hooks/use-toast"
 
 // Define interfaces for better type-safety and code clarity.
 interface MemberDashboardProps {
-  apiKey: string
-  steamAccounts?: { [key: string]: { id: string; name: string; persona: string; time: number } }[]
-  isBuddyModeEnabled: boolean
-  keyLink?: number
-  keyStop?: number
-  bans?: any
-  rolls?: any[]
-  uploads?: any[]
-  bonks?: any[]
+  apiKey: string;
+  steamAccounts?: { [key: string]: { id: string; name: string; persona: string; time: number } }[];
+  isBuddyModeEnabled: boolean;
+  keyLink?: number;
+  keyStop?: number;
+  bans?: any;
+  rolls?: any[];
+  uploads?: any[];
+  bonks?: any[];
+  handleApiRequest: (params: Record<string, string>) => Promise<string | null>;
 }
 
 interface BuddyInfo {
@@ -31,7 +32,7 @@ interface BuddyInfo {
 
 const API_BASE_URL = "https://constelia.ai/api.php"
 
-export function MemberDashboard({ apiKey, steamAccounts, isBuddyModeEnabled, keyLink, keyStop, bans, rolls, uploads, bonks }: MemberDashboardProps) {
+export function MemberDashboard({ apiKey, steamAccounts, isBuddyModeEnabled, keyLink, keyStop, bans, rolls, uploads, bonks, handleApiRequest }: MemberDashboardProps) {
   console.log("MemberDashboard props:", { bans, rolls, uploads, bonks });
   const [buddyName, setBuddyName] = useState("")
   const [buddyInfo, setBuddyInfo] = useState<BuddyInfo | null>(null)
@@ -61,25 +62,7 @@ export function MemberDashboard({ apiKey, steamAccounts, isBuddyModeEnabled, key
   }, [listeningForKey])
   const { toast } = useToast()
 
-  // Centralized API request handler for consistency and robustness.
-  const handleApiRequest = useCallback(async (params: Record<string, string>) => {
-    if (!apiKey) return null
-    const urlParams = new URLSearchParams({ key: apiKey, ...params })
-    const url = `${API_BASE_URL}?${urlParams.toString()}`
-
-    try {
-      const res = await fetch(url)
-      const responseText = await res.text()
-      if (!res.ok) throw new Error(responseText || `HTTP ${res.status}`)
-      
-      const preMatch = responseText.match(/<pre>([\s\S]*?)<\/pre>/)
-      return preMatch ? preMatch[1].trim() : responseText.trim()
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : "An unknown error occurred."
-      toast({ title: "API Error", description: errorMessage, variant: "destructive" })
-      return null
-    }
-  }, [apiKey, toast])
+  
 
   const getBuddyInfo = async () => {
     if (!isBuddyModeEnabled || !buddyName.trim()) return

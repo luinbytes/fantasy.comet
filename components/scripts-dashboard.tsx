@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from "react"
+import { useState, useEffect, useMemo, useCallback, useRef } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -31,21 +31,26 @@ interface Script {
 }
 
 interface ScriptsDashboardProps {
-  apiKey: string
+  apiKey: string;
+  handleApiRequest: (params: Record<string, string>) => Promise<string | null>;
+  isActive: boolean;
 }
 
 const API_BASE_URL = "https://constelia.ai/api.php"
 
-export function ScriptsDashboard({ apiKey }: ScriptsDashboardProps) {
+
+
+  export function ScriptsDashboard({ apiKey, handleApiRequest, isActive }: ScriptsDashboardProps) {
   const [scripts, setScripts] = useState<Script[]>([])
-  const [enabledScriptIds, setEnabledScriptIds] = useState<Set<string | number>>(new Set())
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [openScriptId, setOpenScriptId] = useState<string | number | null>(null)
   const [searchTerm, setSearchTerm] = useState("")
   const [sortOrder, setSortOrder] = useState("newest")
+  const [openScriptId, setOpenScriptId] = useState<string | number | null>(null)
   const [showEnabledOnly, setShowEnabledOnly] = useState(false)
+  const [enabledScriptIds, setEnabledScriptIds] = useState<Set<string | number>>(new Set())
   const [categoryFilter, setCategoryFilter] = useState("all")
+
   const { toast } = useToast()
 
   const SCRIPT_CATEGORIES = [
@@ -79,27 +84,6 @@ export function ScriptsDashboard({ apiKey }: ScriptsDashboardProps) {
     { id: 27, name: "Linux Only" },
     { id: 28, name: "Aurora2 Supported" },
   ]
-
-  // Centralized API request handler for consistency.
-  const handleApiRequest = useCallback(async (params: Record<string, string>) => {
-    if (!apiKey) return null
-    const urlParams = new URLSearchParams({ key: apiKey, ...params })
-    const url = `${API_BASE_URL}?${urlParams.toString()}`
-
-    try {
-      const res = await fetch(url)
-      const responseText = await res.text()
-      if (!res.ok) throw new Error(responseText || `HTTP ${res.status}`)
-      
-      const preMatch = responseText.match(/<pre>([\s\S]*?)<\/pre>/)
-      return preMatch ? preMatch[1].trim() : responseText.trim()
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : "An unknown error occurred."
-      setError(errorMessage)
-      toast({ title: "API Error", description: errorMessage, variant: "destructive" })
-      return null
-    }
-  }, [apiKey, toast])
 
   const fetchScripts = useCallback(async () => {
     setLoading(true)
@@ -143,11 +127,11 @@ export function ScriptsDashboard({ apiKey }: ScriptsDashboardProps) {
   }, [handleApiRequest, toast])
 
   useEffect(() => {
-    if (apiKey) {
-      fetchScripts()
-      fetchEnabledScripts()
+    if (apiKey && isActive) {
+      fetchScripts();
+      fetchEnabledScripts();
     }
-  }, [apiKey, fetchScripts, fetchEnabledScripts])
+  }, [apiKey, isActive, fetchScripts, fetchEnabledScripts]);
 
   const SOFTWARE_ID_TO_NAME: { [key: string]: string } = {
     "4": "Constellation4",

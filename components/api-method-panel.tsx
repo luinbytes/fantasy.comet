@@ -25,6 +25,7 @@ interface ApiMethodPanelProps {
   category: string
   apiKey: string
   userInfo: any
+  handleApiRequest: (params: Record<string, string>) => Promise<string | null>;
 }
 
 interface ApiResponse {
@@ -34,53 +35,12 @@ interface ApiResponse {
   status?: number
 }
 
-export function ApiMethodPanel({ methods, category, apiKey, userInfo }: ApiMethodPanelProps) {
+export function ApiMethodPanel({ methods, category, apiKey, userInfo, handleApiRequest }: ApiMethodPanelProps) {
   const [selectedMethod, setSelectedMethod] = useState<ApiMethod | null>(null)
   const [methodParams, setMethodParams] = useState<Record<string, string>>({})
   const [response, setResponse] = useState<ApiResponse | null>(null)
   const [loading, setLoading] = useState(false)
   const { toast } = useToast()
-
-  // Centralized API request handler for consistency and robustness.
-  const handleApiRequest = async (url: string, options: RequestInit = {}) => {
-    setLoading(true)
-    setResponse(null)
-    try {
-      const res = await fetch(url, options)
-      const responseText = await res.text()
-
-      // Improved response cleaning
-      let cleanedResponse = responseText.trim()
-      if (cleanedResponse.startsWith("<pre>")) {
-        cleanedResponse = cleanedResponse.substring(5, cleanedResponse.length - 6).trim()
-      }
-
-      let data
-      try {
-        data = JSON.parse(cleanedResponse)
-      } catch (e) {
-        data = cleanedResponse
-      }
-
-      const apiResponse: ApiResponse = {
-        success: res.ok,
-        data: data,
-        status: res.status,
-      }
-
-      if (!res.ok) {
-        apiResponse.error = typeof data === 'object' && data.error ? data.error : cleanedResponse
-      }
-
-      setResponse(apiResponse)
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "A network error occurred."
-      setResponse({ success: false, error: errorMessage, status: 0 })
-      toast({ title: "Error", description: errorMessage, variant: "destructive" })
-    } finally {
-      setLoading(false)
-    }
-  }
 
   const executeApiCall = async () => {
     if (!selectedMethod || !apiKey) {
@@ -100,16 +60,39 @@ export function ApiMethodPanel({ methods, category, apiKey, userInfo }: ApiMetho
       return
     }
 
-    // Use URLSearchParams for safer and cleaner URL construction.
-    const params = new URLSearchParams({ key: apiKey, cmd: selectedMethod.name })
+    setLoading(true);
+    setResponse(null);
+
+    const params: Record<string, string> = { cmd: selectedMethod.name };
     Object.entries(methodParams).forEach(([key, value]) => {
       if (value.trim()) {
-        params.append(key, value)
+        params[key] = value;
       }
-    })
+    });
 
-    const url = `${API_BASE_URL}?${params.toString()}`
-    await handleApiRequest(url)
+    const result = await handleApiRequest(params);
+
+    if (result) {
+      try {
+        const data = JSON.parse(result);
+        const apiResponse: ApiResponse = {
+          success: true,
+          data: data,
+          status: 200, // Assuming 200 for successful parse
+        };
+        setResponse(apiResponse);
+      } catch (e) {
+        const apiResponse: ApiResponse = {
+          success: true, // Still consider it a success if it's just text
+          data: result,
+          status: 200,
+        };
+        setResponse(apiResponse);
+      }
+    } else {
+      setResponse({ success: false, error: "API call failed or returned no data.", status: 0 });
+    }
+    setLoading(false);
   }
 
   // Auto-populate parameters when user info is available.
