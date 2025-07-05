@@ -18,7 +18,7 @@ To set up and run the project locally, follow these steps:
 ### Prerequisites
 
 - Node.js (LTS version recommended)
-- pnpm (or npm/yarn, but pnpm is used in this project)
+- npm (or pnpm/yarn, but npm is used in this project)
 
 ### Installation
 
@@ -30,7 +30,7 @@ To set up and run the project locally, follow these steps:
 
 2. Install dependencies:
    ```bash
-   pnpm install
+   npm install
    ```
 
 ### Running the Development Server
@@ -38,7 +38,7 @@ To set up and run the project locally, follow these steps:
 To start the development server:
 
 ```bash
-pnpm dev
+npm run dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000) in your browser to see the application.
@@ -48,7 +48,7 @@ Open [http://localhost:3000](http://localhost:3000) in your browser to see the a
 To build the application for production:
 
 ```bash
-pnpm build
+npm run build
 ```
 
 ### Running in Production
@@ -56,5 +56,5 @@ pnpm build
 To start the production server:
 
 ```bash
-pnpm start
+npm run start
 ```
