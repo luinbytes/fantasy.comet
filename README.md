@@ -76,7 +76,7 @@ To set up and run the project locally, follow these steps:
 
 1. Clone the repository:
    ```bash
-   git clone <repository-url>
+   git clone https://github.com/luinbytes/fantasy.comet
    cd fantasy.comet
    ```
 
