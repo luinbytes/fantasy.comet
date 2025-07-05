@@ -1,3 +1,0 @@
-@echo off
-echo Building and starting the app...
-call npm run build && npm start 
