@@ -106,13 +106,49 @@ const API_BASE_URL = "https://constelia.ai/api.php"
     setLoading(false)
   }, [handleApiRequest])
 
+  const toggleScriptStatus = useCallback(async (scriptId: string | number, scriptName: string) => {
+    const cmd = "toggleScriptStatus";
+    const result = await handleApiRequest({ cmd, id: String(scriptId) });
+    if (result) {
+      try {
+        const data = JSON.parse(result);
+        if (data.status === 200) { // Changed from data.code to data.status
+          toast({
+            title: "Script Status Updated",
+            description: `${scriptName} has been ${enabledScriptIds.has(Number(scriptId)) ? "disabled" : "enabled"}.`,
+          });
+          // Optimistically update the UI state only on successful API response
+          setEnabledScriptIds(prev => {
+            const newSet = new Set(prev);
+            const numScriptId = Number(scriptId); // Ensure Number type for consistency
+            if (newSet.has(numScriptId)) {
+              newSet.delete(numScriptId);
+            } else {
+              newSet.add(numScriptId);
+            }
+            return newSet;
+          });
+        } else {
+          throw new Error(data.message || "Failed to toggle script status.");
+        }
+      } catch (e) {
+        const errorMessage = e instanceof Error ? e.message : "An unknown error occurred.";
+        toast({
+          title: "Error Toggling Script",
+          description: errorMessage,
+          variant: "destructive",
+        });
+      }
+    }
+  }, [handleApiRequest, enabledScriptIds, toast]);
+
   const fetchEnabledScripts = useCallback(async () => {
     const result = await handleApiRequest({ cmd: "getMember", scripts: "true" })
     if (result) {
       try {
         const data = JSON.parse(result)
         if (data.scripts && Array.isArray(data.scripts)) {
-          const ids = new Set(data.scripts.map((s: Script) => s.id))
+          const ids = new Set(data.scripts.map((s: { id: string | number }) => Number(s.id)))
           setEnabledScriptIds(ids)
         }
       } catch (e) {
@@ -143,7 +179,7 @@ const API_BASE_URL = "https://constelia.ai/api.php"
     return scripts
       .filter(script => {
         const searchTermMatch = script.name.toLowerCase().includes(searchTerm.toLowerCase())
-        const enabledMatch = !showEnabledOnly || enabledScriptIds.has(script.id)
+        const enabledMatch = !showEnabledOnly || enabledScriptIds.has(Number(script.id))
         const categoryMatch = categoryFilter === "all" || (Array.isArray(script.category_names) && script.category_names.includes(categoryFilter))
         return searchTermMatch && enabledMatch && categoryMatch
       })
@@ -238,7 +274,7 @@ const API_BASE_URL = "https://constelia.ai/api.php"
                     <div className="flex justify-between items-start">
                       <div className="flex items-center gap-2">
                         <CardTitle className="text-lg text-gray-100">{script.name}</CardTitle>
-                        {enabledScriptIds.has(script.id) && <Badge variant="success">Enabled</Badge>}
+                        {enabledScriptIds.has(Number(script.id)) && <Badge variant="success">Enabled</Badge>}
                       </div>
                       {openScriptId === script.id ? <ChevronDown className="h-5 w-5 text-gray-400" /> : <ChevronRight className="h-5 w-5 text-gray-400" />}
                     </div>
@@ -251,6 +287,17 @@ const API_BASE_URL = "https://constelia.ai/api.php"
                     <p className="text-sm text-gray-400">Author: {script.author}</p>
                     <p className="text-sm text-gray-400">Last Update: {script.elapsed}</p>
                     {script.update_notes && <p className="text-sm text-gray-300 bg-gray-800 p-2 rounded">Notes: {script.update_notes}</p>}
+                    <Button
+                      onClick={(e) => {
+                        e.stopPropagation(); // Prevent collapsible from toggling
+                        toggleScriptStatus(script.id, script.name); // Pass script.name
+                      }}
+                      variant={enabledScriptIds.has(Number(script.id)) ? "destructive" : "default"}
+                      size="sm"
+                      className="w-full mt-2"
+                    >
+                      {enabledScriptIds.has(Number(script.id)) ? "Disable" : "Enable"}
+                    </Button>
                   </CardContent>
                 </CollapsibleContent>
               </Collapsible>

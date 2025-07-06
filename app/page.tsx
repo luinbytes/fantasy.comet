@@ -94,9 +94,12 @@ export default function ConstellaControlApp() {
       const preMatch = responseText.match(/<pre>([\s\S]*?)<\/pre>/)
       return preMatch ? preMatch[1].trim() : responseText.trim()
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : "An unknown error occurred."
-      toast({ title: "API Error", description: errorMessage, variant: "destructive" })
-      return null
+      const rawErrorMessage = err instanceof Error ? err.message : "An unknown error occurred.";
+      const userFriendlyMessage = rawErrorMessage.includes("API is not available because there is not an active Session for this license key")
+        ? "You need to register a session on the forum."
+        : rawErrorMessage;
+      toast({ title: "API Error", description: userFriendlyMessage, variant: "destructive" });
+      return null;
     }
   }, [apiKey, toast])
 
