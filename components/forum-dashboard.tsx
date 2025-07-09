@@ -24,7 +24,7 @@ interface ForumPost {
 
 interface ForumDashboardProps {
   apiKey: string;
-  handleApiRequest: (params: Record<string, string>) => Promise<string | null>;
+  handleApiRequest: (params: Record<string, any>, method?: "GET" | "POST", postData?: Record<string, any>) => Promise<any | null>;
 }
 
 const API_BASE_URL = "https://constelia.ai/api.php"
@@ -39,8 +39,6 @@ export function ForumDashboard({ apiKey, handleApiRequest }: ForumDashboardProps
   const [commandLoading, setCommandLoading] = useState(false)
   const { toast } = useToast()
 
-  
-
   const fetchForumPosts = useCallback(async () => {
     setLoading(true)
     setError(null)
@@ -48,18 +46,15 @@ export function ForumDashboard({ apiKey, handleApiRequest }: ForumDashboardProps
     const result = await handleApiRequest({ cmd: "getForumPosts", count: count.toString() })
 
     if (result) {
-      try {
-        const data = JSON.parse(result)
-        if (Array.isArray(data)) {
-          setPosts(data)
-        } else if (data.error) {
-          setError(data.error)
-        } else {
-          setError("Received an unexpected data format.")
-        }
-      } catch {
-        setError("Failed to parse server response.")
+      if (Array.isArray(result)) { // result is already parsed JSON
+        setPosts(result)
+      } else if (result.error) {
+        setError(result.error)
+      } else {
+        setError("Received an unexpected data format.")
       }
+    } else {
+      setError("API call failed or returned no data.");
     }
     setLoading(false)
   }, [postCount, handleApiRequest])
@@ -69,8 +64,12 @@ export function ForumDashboard({ apiKey, handleApiRequest }: ForumDashboardProps
     setCommandLoading(true)
     setCommandResult(null)
     const result = await handleApiRequest({ cmd: "sendCommand", command })
-    if (result !== null) {
-      setCommandResult(result)
+    if (result && typeof result === 'string') { // result is raw text
+      setCommandResult(result);
+    } else if (result && result.error) { // If it's an error object from callApi
+      setCommandResult(result.error);
+    } else {
+      setCommandResult("API call failed or returned no data.");
     }
     setCommandLoading(false)
   }

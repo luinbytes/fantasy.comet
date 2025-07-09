@@ -3,14 +3,33 @@ import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Info, AlertTriangle } from "lucide-react"
 
+/**
+ * @interface MethodDocProps
+ * @description Props for the MethodDocumentation component.
+ * @property {string} method - The name of the API method to display documentation for.
+ * @property {string} category - The category of the API method (currently unused but part of the interface).
+ */
 interface MethodDocProps {
   method: string
   category: string
 }
 
+/**
+ * @component MethodDocumentation
+ * @description Displays specific documentation and warnings for selected API methods.
+ * @param {MethodDocProps} props - The props for the MethodDocumentation component.
+ * @returns {JSX.Element | null} The rendered method documentation card or null if no special information is available.
+ */
 export function MethodDocumentation({ method, category }: MethodDocProps) {
+  /**
+   * @function getMethodInfo
+   * @description Provides specific notes, warnings, and examples for certain API methods.
+   * @param {string} methodName - The name of the method to retrieve information for.
+   * @returns {Object | null} An object containing note, warning, and/or example, or null if no special info.
+   */
   const getMethodInfo = (methodName: string) => {
-    const specialMethods = {
+    // Defines special handling and documentation for specific API methods.
+    const specialMethods: { [key: string]: { note?: string; warning?: string; example?: string } } = {
       updateScript: {
         note: "Requires POST data for script, content, and notes parameters",
         warning: "Notes must be detailed and descriptive per Community Guidelines",
@@ -46,20 +65,24 @@ export function MethodDocumentation({ method, category }: MethodDocProps) {
 
   const methodInfo = getMethodInfo(method)
 
+  // If no special information is found for the method, return null to render nothing.
   if (!methodInfo) return null
 
   return (
+    // Card container for method documentation
     <Card className="mt-4 bg-gray-900 border-gray-800">
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-sm text-gray-100">
           <Info className="h-4 w-4" />
           Method Information
+          {/* Badge displaying the method name */}
           <Badge variant="outline" className="border-gray-700 text-gray-300">
             {method}
           </Badge>
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
+        {/* Display a note if available */}
         {methodInfo.note && (
           <Alert className="bg-blue-950 border-blue-800">
             <Info className="h-4 w-4" />
@@ -67,6 +90,7 @@ export function MethodDocumentation({ method, category }: MethodDocProps) {
           </Alert>
         )}
 
+        {/* Display a warning if available */}
         {methodInfo.warning && (
           <Alert variant="destructive" className="bg-red-950 border-red-800">
             <AlertTriangle className="h-4 w-4" />
@@ -74,6 +98,7 @@ export function MethodDocumentation({ method, category }: MethodDocProps) {
           </Alert>
         )}
 
+        {/* Display an example if available */}
         {methodInfo.example && (
           <div className="space-y-1">
             <p className="text-sm font-medium text-gray-300">Example usage:</p>

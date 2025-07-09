@@ -11,23 +11,44 @@ import { Badge } from "@/components/ui/badge"
 import { Send, Loader2, CheckCircle, AlertCircle, Code } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 
-// Consistent API base URL
-const API_BASE_URL = "https://constelia.ai/api.php"
-
+/**
+ * @interface ApiMethod
+ * @description Defines the structure for an API method.
+ * @property {string} name - The name of the API method.
+ * @property {string[]} params - An array of parameter names for the method.
+ * @property {string} description - A description of what the method does.
+ */
 interface ApiMethod {
   name: string
   params: string[]
   description: string
 }
 
+/**
+ * @interface ApiMethodPanelProps
+ * @description Props for the ApiMethodPanel component.
+ * @property {ApiMethod[]} methods - An array of API methods to display.
+ * @property {string} category - The category of the API methods.
+ * @property {string} apiKey - The API key for authentication.
+ * @property {any} userInfo - User information, potentially used for auto-populating parameters.
+ * @property {(params: Record<string, any>, method?: "GET" | "POST", postData?: Record<string, any>) => Promise<any | null>} handleApiRequest - Function to handle API requests.
+ */
 interface ApiMethodPanelProps {
   methods: ApiMethod[]
   category: string
   apiKey: string
   userInfo: any
-  handleApiRequest: (params: Record<string, string>) => Promise<string | null>;
+  handleApiRequest: (params: Record<string, any>, method?: "GET" | "POST", postData?: Record<string, any>) => Promise<any | null>;
 }
 
+/**
+ * @interface ApiResponse
+ * @description Defines the structure for an API response.
+ * @property {boolean} success - Indicates if the API call was successful.
+ * @property {any} [data] - The data returned from the API.
+ * @property {string} [error] - An error message if the API call failed.
+ * @property {number} [status] - The HTTP status code of the response.
+ */
 interface ApiResponse {
   success: boolean
   data?: any
@@ -35,22 +56,35 @@ interface ApiResponse {
   status?: number
 }
 
+/**
+ * @function ApiMethodPanel
+ * @description A component to display and test individual API methods within a category.
+ * Allows users to input parameters and execute API calls.
+ * @param {ApiMethodPanelProps} props - The component props.
+ * @returns {JSX.Element} The API method panel UI.
+ */
 export function ApiMethodPanel({ methods, category, apiKey, userInfo, handleApiRequest }: ApiMethodPanelProps) {
   const [selectedMethod, setSelectedMethod] = useState<ApiMethod | null>(null)
-  const [methodParams, setMethodParams] = useState<Record<string, string>>({})
-  const [response, setResponse] = useState<ApiResponse | null>(null)
-  const [loading, setLoading] = useState(false)
+  const [methodParams, setMethodParams] = useState<Record<string, string>>({}) // State to hold parameter values for the selected method
+  const [response, setResponse] = useState<ApiResponse | null>(null) // State to hold the API response
+  const [loading, setLoading] = useState(false) // State to indicate if an API call is in progress
   const { toast } = useToast()
 
+  /**
+   * @function executeApiCall
+   * @description Executes the selected API method with the provided parameters.
+   * Validates required parameters and handles API response, including success and error states.
+   * @returns {Promise<void>}
+   */
   const executeApiCall = async () => {
     if (!selectedMethod || !apiKey) {
       toast({ title: "Error", description: "API key and a selected method are required.", variant: "destructive" })
       return
     }
 
-    // Clearer validation for required parameters.
+    // Validate that all required parameters have been provided
     const requiredParams = selectedMethod.params.filter((p) => !p.endsWith("?"))
-    const missingParams = requiredParams.filter((p) => !methodParams[p.replace("?", "")]?.trim())
+    const missingParams = requiredParams.filter((p) => !methodParams[p.replace("?", "")].trim())
 
     if (missingParams.length > 0) {
       setResponse({
@@ -63,39 +97,46 @@ export function ApiMethodPanel({ methods, category, apiKey, userInfo, handleApiR
     setLoading(true);
     setResponse(null);
 
-    const params: Record<string, string> = { cmd: selectedMethod.name };
-    Object.entries(methodParams).forEach(([key, value]) => {
-      if (value.trim()) {
-        params[key] = value;
-      }
-    });
+    const params: Record<string, any> = { cmd: selectedMethod.name };
+    let postData: Record<string, any> | undefined = undefined;
+    let method: "GET" | "POST" = "GET";
 
-    const result = await handleApiRequest(params);
+    // Special handling for POST methods like 'updateScript' or 'teachConstelia'
+    if (selectedMethod.name === "updateScript" || selectedMethod.name === "teachConstelia") {
+      method = "POST";
+      postData = {};
+      Object.entries(methodParams).forEach(([key, value]) => {
+        if (value.trim()) {
+          postData![key] = value; // Use postData for POST parameters
+        }
+      });
+    } else {
+      Object.entries(methodParams).forEach(([key, value]) => {
+        if (value.trim()) {
+          params[key] = value; // Use params for GET query string
+        }
+      });
+    }
+
+    const result = await handleApiRequest(params, method, postData);
 
     if (result) {
-      try {
-        const data = JSON.parse(result);
-        const apiResponse: ApiResponse = {
-          success: true,
-          data: data,
-          status: 200, // Assuming 200 for successful parse
-        };
-        setResponse(apiResponse);
-      } catch (e) {
-        const apiResponse: ApiResponse = {
-          success: true, // Still consider it a success if it's just text
-          data: result,
-          status: 200,
-        };
-        setResponse(apiResponse);
-      }
+      const apiResponse: ApiResponse = {
+        success: true,
+        data: result,
+        status: result.code || 200, // Use result.code if available, otherwise 200
+      };
+      setResponse(apiResponse);
     } else {
       setResponse({ success: false, error: "API call failed or returned no data.", status: 0 });
     }
     setLoading(false);
   }
 
-  // Auto-populate parameters when user info is available.
+  /**
+   * @description Auto-populates method parameters when user info is available and a method is selected.
+   * This is useful for methods that require user-specific data like username or protection level.
+   */
   useEffect(() => {
     if (selectedMethod && userInfo) {
       const newParams = { ...methodParams }
@@ -121,6 +162,12 @@ export function ApiMethodPanel({ methods, category, apiKey, userInfo, handleApiR
     }
   }, [selectedMethod, userInfo])
 
+  /**
+   * @function handleMethodSelect
+   * @description Sets the currently selected API method and initializes its parameters.
+   * @param {ApiMethod} method - The API method to select.
+   * @returns {void}
+   */
   const handleMethodSelect = (method: ApiMethod) => {
     setSelectedMethod(method)
     setResponse(null)
@@ -131,6 +178,12 @@ export function ApiMethodPanel({ methods, category, apiKey, userInfo, handleApiR
     setMethodParams(initialParams)
   }
 
+  /**
+   * @function getStatusColor
+   * @description Determines the color of the status badge based on the HTTP status code.
+   * @param {number} [status] - The HTTP status code.
+   * @returns {"destructive" | "default" | "secondary"} The variant name for the Badge component.
+   */
   const getStatusColor = (status?: number) => {
     if (!status) return "destructive"
     if (status >= 200 && status < 300) return "default"
@@ -140,6 +193,7 @@ export function ApiMethodPanel({ methods, category, apiKey, userInfo, handleApiR
 
   return (
     <div className="space-y-6">
+      {/* Grid display for available API methods */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {methods.map((method) => (
           <Card
@@ -168,6 +222,7 @@ export function ApiMethodPanel({ methods, category, apiKey, userInfo, handleApiR
         ))}
       </div>
 
+      {/* Configuration panel for the selected API method */}
       {selectedMethod && (
         <Card>
           <CardHeader>
@@ -213,6 +268,7 @@ export function ApiMethodPanel({ methods, category, apiKey, userInfo, handleApiR
         </Card>
       )}
 
+      {/* Display area for API response */}
       {response && (
         <Card>
           <CardHeader>

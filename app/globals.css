@@ -1,8 +1,10 @@
+/* Tailwind CSS directives */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
+  /* CSS variables for theming */
   :root {
     --background: 224 71.4% 4.1%;
     --foreground: 210 20% 98%;
@@ -32,6 +34,7 @@
     --chart-5: 340 75% 55%;
   }
 
+  /* Theme-specific primary color overrides */
   .emerald {
     --primary: 124 70% 50.4%;
     --primary-foreground: 210 20% 98%;
@@ -74,6 +77,7 @@
 }
 
 @layer base {
+  /* Apply border and background/text colors globally */
   * {
     @apply border-border;
   }
@@ -82,20 +86,24 @@
   }
 }
 
+/* Keyframe animation for blinking effect */
 @keyframes blink {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.5; }
 }
 
+/* Utility class for blinking animation */
 .animate-blink {
   animation: blink 1.5s infinite ease-in-out;
 }
 
+/* Keyframe animation for pulse effect */
 @keyframes pulse {
   0%, 100% { transform: scale(1); }
   50% { transform: scale(1.02); }
 }
 
+/* Utility class for custom pulse animation */
 .animate-pulse-custom {
   animation: pulse 2s infinite ease-in-out;
 }

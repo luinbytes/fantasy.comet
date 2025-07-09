@@ -6,12 +6,33 @@ import * as AlertDialogPrimitive from "@radix-ui/react-alert-dialog"
 import { cn } from "@/lib/utils"
 import { buttonVariants } from "@/components/ui/button"
 
+/**
+ * @component AlertDialog
+ * @description A modal dialog that interrupts the user with important content and expects a response.
+ * Built using Radix UI's AlertDialogPrimitive.Root.
+ * @see https://www.radix-ui.com/docs/primitives/components/alert-dialog
+ */
 const AlertDialog = AlertDialogPrimitive.Root
 
+/**
+ * @component AlertDialogTrigger
+ * @description The element that opens the AlertDialog.
+ */
 const AlertDialogTrigger = AlertDialogPrimitive.Trigger
 
+/**
+ * @component AlertDialogPortal
+ * @description Portals the AlertDialog content to the end of the `body` element.
+ */
 const AlertDialogPortal = AlertDialogPrimitive.Portal
 
+/**
+ * @component AlertDialogOverlay
+ * @description A semi-transparent overlay that covers the screen when the AlertDialog is open.
+ * @param {object} props - Component props.
+ * @param {string} [props.className] - Additional CSS classes to apply.
+ * @param {React.Ref<React.ElementRef<typeof AlertDialogPrimitive.Overlay>>} ref - Ref to the underlying DOM element.
+ */
 const AlertDialogOverlay = React.forwardRef<
   React.ElementRef<typeof AlertDialogPrimitive.Overlay>,
   React.ComponentPropsWithoutRef<typeof AlertDialogPrimitive.Overlay>
@@ -27,6 +48,13 @@ const AlertDialogOverlay = React.forwardRef<
 ))
 AlertDialogOverlay.displayName = AlertDialogPrimitive.Overlay.displayName
 
+/**
+ * @component AlertDialogContent
+ * @description The main content area of the AlertDialog.
+ * @param {object} props - Component props.
+ * @param {string} [props.className] - Additional CSS classes to apply.
+ * @param {React.Ref<React.ElementRef<typeof AlertDialogPrimitive.Content>>} ref - Ref to the underlying DOM element.
+ */
 const AlertDialogContent = React.forwardRef<
   React.ElementRef<typeof AlertDialogPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof AlertDialogPrimitive.Content>
@@ -45,6 +73,12 @@ const AlertDialogContent = React.forwardRef<
 ))
 AlertDialogContent.displayName = AlertDialogPrimitive.Content.displayName
 
+/**
+ * @component AlertDialogHeader
+ * @description A container for the AlertDialog title and description.
+ * @param {object} props - Component props.
+ * @param {string} [props.className] - Additional CSS classes to apply.
+ */
 const AlertDialogHeader = ({
   className,
   ...props
@@ -59,6 +93,12 @@ const AlertDialogHeader = ({
 )
 AlertDialogHeader.displayName = "AlertDialogHeader"
 
+/**
+ * @component AlertDialogFooter
+ * @description A container for the AlertDialog action and cancel buttons.
+ * @param {object} props - Component props.
+ * @param {string} [props.className] - Additional CSS classes to apply.
+ */
 const AlertDialogFooter = ({
   className,
   ...props
@@ -73,6 +113,13 @@ const AlertDialogFooter = ({
 )
 AlertDialogFooter.displayName = "AlertDialogFooter"
 
+/**
+ * @component AlertDialogTitle
+ * @description The title of the AlertDialog.
+ * @param {object} props - Component props.
+ * @param {string} [props.className] - Additional CSS classes to apply.
+ * @param {React.Ref<React.ElementRef<typeof AlertDialogPrimitive.Title>>} ref - Ref to the underlying DOM element.
+ */
 const AlertDialogTitle = React.forwardRef<
   React.ElementRef<typeof AlertDialogPrimitive.Title>,
   React.ComponentPropsWithoutRef<typeof AlertDialogPrimitive.Title>
@@ -85,6 +132,13 @@ const AlertDialogTitle = React.forwardRef<
 ))
 AlertDialogTitle.displayName = AlertDialogPrimitive.Title.displayName
 
+/**
+ * @component AlertDialogDescription
+ * @description The descriptive text of the AlertDialog.
+ * @param {object} props - Component props.
+ * @param {string} [props.className] - Additional CSS classes to apply.
+ * @param {React.Ref<React.ElementRef<typeof AlertDialogPrimitive.Description>>} ref - Ref to the underlying DOM element.
+ */
 const AlertDialogDescription = React.forwardRef<
   React.ElementRef<typeof AlertDialogPrimitive.Description>,
   React.ComponentPropsWithoutRef<typeof AlertDialogPrimitive.Description>
@@ -98,6 +152,13 @@ const AlertDialogDescription = React.forwardRef<
 AlertDialogDescription.displayName =
   AlertDialogPrimitive.Description.displayName
 
+/**
+ * @component AlertDialogAction
+ * @description A button that performs the primary action of the AlertDialog.
+ * @param {object} props - Component props.
+ * @param {string} [props.className] - Additional CSS classes to apply.
+ * @param {React.Ref<React.ElementRef<typeof AlertDialogPrimitive.Action>>} ref - Ref to the underlying DOM element.
+ */
 const AlertDialogAction = React.forwardRef<
   React.ElementRef<typeof AlertDialogPrimitive.Action>,
   React.ComponentPropsWithoutRef<typeof AlertDialogPrimitive.Action>
@@ -110,6 +171,13 @@ const AlertDialogAction = React.forwardRef<
 ))
 AlertDialogAction.displayName = AlertDialogPrimitive.Action.displayName
 
+/**
+ * @component AlertDialogCancel
+ * @description A button that cancels the AlertDialog.
+ * @param {object} props - Component props.
+ * @param {string} [props.className] - Additional CSS classes to apply.
+ * @param {React.Ref<React.ElementRef<typeof AlertDialogPrimitive.Cancel>>} ref - Ref to the underlying DOM element.
+ */
 const AlertDialogCancel = React.forwardRef<
   React.ElementRef<typeof AlertDialogPrimitive.Cancel>,
   React.ComponentPropsWithoutRef<typeof AlertDialogPrimitive.Cancel>

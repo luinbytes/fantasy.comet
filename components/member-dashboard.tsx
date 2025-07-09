@@ -11,7 +11,20 @@ import { Loader2, Users, Eye, EyeOff, Key, AlertCircle } from "lucide-react"
 import { getKeyName, VK_CODES } from "@/utils/keycodes"
 import { useToast } from "@/hooks/use-toast"
 
-// Define interfaces for better type-safety and code clarity.
+/**
+ * @interface MemberDashboardProps
+ * @description Props for the MemberDashboard component.
+ * @property {string} apiKey - The API key for making requests.
+ * @property {Array<Object>} [steamAccounts] - List of Steam accounts associated with the member.
+ * @property {boolean} isBuddyModeEnabled - Indicates if buddy mode is enabled.
+ * @property {number} [keyLink] - The virtual key code for the link key.
+ * @property {number} [keyStop] - The virtual key code for the stop/panic key.
+ * @property {any} [bans] - Information about VAC/Game bans.
+ * @property {Array<any>} [rolls] - History of loot rolls.
+ * @property {Array<any>} [uploads] - History of file uploads.
+ * @property {Array<any>} [bonks] - History of bonks received.
+ * @property {(params: Record<string, any>, method?: "GET" | "POST", postData?: Record<string, any>) => Promise<any | null>} handleApiRequest - Function to handle API requests.
+ */
 interface MemberDashboardProps {
   apiKey: string;
   steamAccounts?: { [key: string]: { id: string; name: string; persona: string; time: number } }[];
@@ -22,26 +35,41 @@ interface MemberDashboardProps {
   rolls?: any[];
   uploads?: any[];
   bonks?: any[];
-  handleApiRequest: (params: Record<string, string>) => Promise<string | null>;
+  handleApiRequest: (params: Record<string, any>, method?: "GET" | "POST", postData?: Record<string, any>) => Promise<any | null>;
 }
 
+/**
+ * @interface BuddyInfo
+ * @description Interface for the information returned by the getMemberAsBuddy API call.
+ * @property {string} [error] - Error message if the API call fails.
+ * @property {any} [key: string] - Dynamic properties for member information.
+ */
 interface BuddyInfo {
   error?: string
   [key: string]: any
 }
 
-const API_BASE_URL = "https://constelia.ai/api.php"
-
+/**
+ * @component MemberDashboard
+ * @description A dashboard component for managing member-related features such as buddy system, Steam accounts, and hotkey configurations.
+ * @param {MemberDashboardProps} props - The props for the MemberDashboard component.
+ * @returns {JSX.Element} The rendered MemberDashboard component.
+ */
 export function MemberDashboard({ apiKey, steamAccounts, isBuddyModeEnabled, keyLink, keyStop, bans, rolls, uploads, bonks, handleApiRequest }: MemberDashboardProps) {
-  console.log("MemberDashboard props:", { bans, rolls, uploads, bonks });
-  const [buddyName, setBuddyName] = useState("")
-  const [buddyInfo, setBuddyInfo] = useState<BuddyInfo | null>(null)
-  const [loading, setLoading] = useState(false)
-  const [selectedSteamAccount, setSelectedSteamAccount] = useState("")
-  const [linkKey, setLinkKey] = useState(keyLink ? keyLink.toString() : "")
-  const [stopKey, setStopKey] = useState(keyStop ? keyStop.toString() : "")
-  const [listeningForKey, setListeningForKey] = useState<"link" | "stop" | null>(null)
+  // console.log("MemberDashboard props:", { bans, rolls, uploads, bonks }); // Log for debugging purposes, can be removed in production.
+  const [buddyName, setBuddyName] = useState("") // State to store the username for buddy system lookups.
+  const [buddyInfo, setBuddyInfo] = useState<BuddyInfo | null>(null) // State to store information about the looked-up buddy.
+  const [loading, setLoading] = useState(false) // State to manage loading status during API calls.
+  const [selectedSteamAccount, setSelectedSteamAccount] = useState("") // State to store the currently selected Steam account for management.
+  const [linkKey, setLinkKey] = useState(keyLink ? keyLink.toString() : "") // State to store the virtual key code for the link key.
+  const [stopKey, setStopKey] = useState(keyStop ? keyStop.toString() : "") // State to store the virtual key code for the stop/panic key.
+  const [listeningForKey, setListeningForKey] = useState<"link" | "stop" | null>(null) // State to indicate if the component is listening for a key press.
 
+  /**
+   * @function useEffect
+   * @description Handles global keydown events to capture hotkey presses for link and stop keys.
+   * Prevents default behavior of the key press when listening for a key.
+   */
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (listeningForKey) {
@@ -60,35 +88,50 @@ export function MemberDashboard({ apiKey, steamAccounts, isBuddyModeEnabled, key
       window.removeEventListener("keydown", handleKeyDown)
     }
   }, [listeningForKey])
+  // Initialize toast hook for displaying notifications.
   const { toast } = useToast()
 
-  
-
+  /**
+   * @function getBuddyInfo
+   * @description Fetches information about a member using the "getMemberAsBuddy" API command.
+   * This function is only available when buddy mode is enabled.
+   */
   const getBuddyInfo = async () => {
     if (!isBuddyModeEnabled || !buddyName.trim()) return
     setLoading(true)
     setBuddyInfo(null)
     const result = await handleApiRequest({ cmd: "getMemberAsBuddy", name: buddyName })
     if (result) {
-      try {
-        setBuddyInfo(JSON.parse(result))
-      } catch {
-        setBuddyInfo({ error: result })
+      if (result.error) { // Check for error property in the returned object
+        setBuddyInfo({ error: result.error });
+      } else {
+        setBuddyInfo(result); // result is already parsed JSON
       }
+    } else {
+      setBuddyInfo({ error: "API call failed or returned no data." });
     }
     setLoading(false)
   }
 
+  /**
+   * @function manageSteamAccount
+   * @description Hides or shows a Steam account using the "hideSteamAccount" or "showSteamAccount" API commands.
+   * @param {"hide" | "show"} action - The action to perform: "hide" or "show".
+   */
   const manageSteamAccount = async (action: "hide" | "show") => {
     if (!selectedSteamAccount) return
     const cmd = action === "hide" ? "hideSteamAccount" : "showSteamAccount"
     const result = await handleApiRequest({ cmd, name: selectedSteamAccount })
-    if (result !== null) {
+    if (result) { // result is already parsed JSON
       toast({ title: "Success", description: `Steam account ${action}d successfully!` })
       setSelectedSteamAccount("")
     }
   }
 
+  /**
+   * @function setKeys
+   * @description Sets the link and/or stop hotkeys using the "setKeys" API command.
+   */
   const setKeys = async () => {
     if (!linkKey && !stopKey) return
     const params: Record<string, string> = { cmd: "setKeys" }
@@ -96,12 +139,13 @@ export function MemberDashboard({ apiKey, steamAccounts, isBuddyModeEnabled, key
     if (stopKey) params.stop = stopKey
 
     const result = await handleApiRequest(params)
-    if (result !== null) {
+    if (result) { // result is already parsed JSON
       toast({ title: "Success", description: "Keys updated successfully!" })
     }
   }
 
   if (!apiKey) {
+    // Display a message if no API key is provided, prompting the user to enter it.
     return (
       <Card className="bg-gray-900 border-gray-800"><CardContent className="pt-6"><div className="text-center text-gray-400"><Users className="h-8 w-8 mx-auto mb-2 opacity-50" /><p>Enter your API key to access member features</p></div></CardContent></Card>
     )
@@ -109,18 +153,23 @@ export function MemberDashboard({ apiKey, steamAccounts, isBuddyModeEnabled, key
 
   return (
     <div className="space-y-6">
+      {/* Page header with title and description */}
       <div className="flex items-center justify-between"><div><h2 className="text-2xl font-bold text-gray-100">Member Management</h2><p className="text-gray-400">Manage buddy system, Steam accounts, and hotkeys</p></div></div>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="space-y-4">
+          {/* Buddy System Card - conditionally rendered if buddy mode is enabled */}
           {isBuddyModeEnabled && (
             <Card className="bg-gray-900 border-gray-800">
               <CardHeader><CardTitle className="flex items-center gap-2 text-gray-100"><Users className="h-5 w-5" />Buddy System</CardTitle></CardHeader>
               <CardContent className="space-y-4">
+                {/* Alert for buddy system requirements */}
                 <Alert className="bg-blue-950 border-blue-800"><AlertCircle className="h-4 w-4" /><AlertDescription className="text-blue-200 text-sm">Requires Buddy or VIP status. Only works on Level 1 members.</AlertDescription></Alert>
+                {/* Input for member username and Get Info button */}
                 <div className="space-y-2">
                   <Label htmlFor="buddy-name" className="text-gray-300">Member Username</Label>
                   <div className="flex gap-2"><Input id="buddy-name" value={buddyName} onChange={(e) => setBuddyName(e.target.value)} placeholder="Enter member username" className="bg-gray-800 border-gray-700 text-gray-100" /><Button onClick={getBuddyInfo} disabled={loading || !buddyName.trim()} className="bg-purple-600 hover:bg-purple-700 text-white">{loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Get Info"}</Button></div>
                 </div>
+                {/* Display buddy information if available */}
                 {buddyInfo && (
                   <div className="space-y-2">
                     <Label className="text-gray-300">Member Information</Label>
@@ -132,9 +181,11 @@ export function MemberDashboard({ apiKey, steamAccounts, isBuddyModeEnabled, key
               </CardContent>
             </Card>
           )}
+          {/* Steam Account Visibility Card */}
           <Card className="bg-gray-900 border-gray-800">
             <CardHeader><CardTitle className="flex items-center gap-2 text-gray-100"><Eye className="h-5 w-5" />Steam Account Visibility</CardTitle></CardHeader>
             <CardContent className="space-y-4">
+              {/* Select dropdown for Steam accounts */}
               <div className="space-y-2">
                 <Label htmlFor="steam-account" className="text-gray-300">Steam Account</Label>
                 <Select value={selectedSteamAccount} onValueChange={setSelectedSteamAccount}>
@@ -150,12 +201,14 @@ export function MemberDashboard({ apiKey, steamAccounts, isBuddyModeEnabled, key
                   </SelectContent>
                 </Select>
               </div>
+              {/* Buttons to hide or show selected Steam account */}
               <div className="flex gap-2">
                 <Button onClick={() => manageSteamAccount("hide")} disabled={!selectedSteamAccount} variant="outline" className="flex-1 border-gray-700 text-gray-300 hover:bg-gray-800 bg-transparent"><EyeOff className="h-4 w-4 mr-2" />Hide Account</Button>
                 <Button onClick={() => manageSteamAccount("show")} disabled={!selectedSteamAccount} variant="outline" className="flex-1 border-gray-700 text-gray-300 hover:bg-gray-800 bg-transparent"><Eye className="h-4 w-4 mr-2" />Show Account</Button>
               </div>
             </CardContent>
           </Card>
+          {/* VAC/Game Ban Status Card - conditionally rendered if ban information is available */}
           {bans && (
             <Card className="bg-gray-900 border-gray-800">
               <CardHeader><CardTitle className="flex items-center gap-2 text-gray-100"><AlertCircle className="h-5 w-5" />VAC/Game Ban Status</CardTitle></CardHeader>
@@ -168,6 +221,7 @@ export function MemberDashboard({ apiKey, steamAccounts, isBuddyModeEnabled, key
               </CardContent>
             </Card>
           )}
+          {/* Loot History Card - conditionally rendered if loot roll information is available */}
           {rolls && rolls.length > 0 && (
             <Card className="bg-gray-900 border-gray-800">
               <CardHeader><CardTitle className="flex items-center gap-2 text-gray-100"><Key className="h-5 w-5" />Loot History</CardTitle></CardHeader>
@@ -181,6 +235,7 @@ export function MemberDashboard({ apiKey, steamAccounts, isBuddyModeEnabled, key
               </CardContent>
             </Card>
           )}
+          {/* Upload History Card - conditionally rendered if upload information is available */}
           {uploads && uploads.length > 0 && (
             <Card className="bg-gray-900 border-gray-800">
               <CardHeader><CardTitle className="flex items-center gap-2 text-gray-100"><Upload className="h-5 w-5" />Upload History</CardTitle></CardHeader>
@@ -194,6 +249,7 @@ export function MemberDashboard({ apiKey, steamAccounts, isBuddyModeEnabled, key
               </CardContent>
             </Card>
           )}
+          {/* Bonk History Card - conditionally rendered if bonk information is available */}
           {bonks && bonks.length > 0 && (
             <Card className="bg-gray-900 border-gray-800">
               <CardHeader><CardTitle className="flex items-center gap-2 text-gray-100"><Key className="h-5 w-5" />Bonk History</CardTitle></CardHeader>
@@ -209,10 +265,12 @@ export function MemberDashboard({ apiKey, steamAccounts, isBuddyModeEnabled, key
           )}
         </div>
         <div className="space-y-4">
+          {/* Hotkey Configuration Card */}
           <Card className="bg-gray-900 border-gray-800">
             <CardHeader><CardTitle className="flex items-center gap-2 text-gray-100"><Key className="h-5 w-5" />Hotkey Configuration</CardTitle></CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-4">
+                {/* Link Key configuration */}
                 <div className="space-y-2">
                   <Label htmlFor="link-key" className="text-gray-300">Link Key</Label>
                   <div className="flex gap-2 items-center">
@@ -226,6 +284,7 @@ export function MemberDashboard({ apiKey, steamAccounts, isBuddyModeEnabled, key
                     )}
                   </div>
                 </div>
+                {/* Stop/Panic Key configuration */}
                 <div className="space-y-2">
                   <Label htmlFor="stop-key" className="text-gray-300">Stop/Panic Key</Label>
                   <div className="flex gap-2 items-center">
@@ -239,8 +298,10 @@ export function MemberDashboard({ apiKey, steamAccounts, isBuddyModeEnabled, key
                     )}
                   </div>
                 </div>
+                {/* Button to update keys */}
                 <Button onClick={setKeys} disabled={!linkKey && !stopKey} className="w-full"><Key className="h-4 w-4 mr-2" />Update Keys</Button>
               </div>
+              {/* Alert for common key codes */}
               <Alert className="bg-blue-950 border-blue-800"><AlertCircle className="h-4 w-4" /><AlertDescription className="text-blue-200 text-sm">Common keys: F1-F12 (112-123), Ctrl (17), Alt (18), Shift (16)</AlertDescription></Alert>
             </CardContent>
           </Card>

@@ -13,7 +13,14 @@ import { Play, Copy, Download, Loader2, AlertCircle, Code2, Terminal, FileText, 
 import { allApiMethods } from "@/lib/api-methods"
 import { useToast } from "@/hooks/use-toast"
 
-// It's good practice to define interfaces for the data structures being used.
+/**
+ * @interface ApiMethod
+ * @description Defines the structure for an API method, including its parameters and category.
+ * @property {string} name - The name of the API method.
+ * @property {string[]} params - An array of parameter names for the method.
+ * @property {string} description - A description of what the method does.
+ * @property {string} category - The category the API method belongs to.
+ */
 interface ApiMethod {
   name: string
   params: string[]
@@ -21,11 +28,30 @@ interface ApiMethod {
   category: string
 }
 
+/**
+ * @interface ApiTestDashboardProps
+ * @description Props for the ApiTestDashboard component.
+ * @property {string} apiKey - The API key for authentication.
+ * @property {(params: Record<string, any>, method?: "GET" | "POST", postData?: Record<string, any>) => Promise<any | null>} handleApiRequest - Function to handle API requests.
+ */
 interface ApiTestDashboardProps {
   apiKey: string;
-  handleApiRequest: (params: Record<string, string>) => Promise<string | null>;
+  handleApiRequest: (params: Record<string, any>, method?: "GET" | "POST", postData?: Record<string, any>) => Promise<any | null>;
 }
 
+/**
+ * @interface TestResult
+ * @description Defines the structure for a single API test result.
+ * @property {string} id - A unique identifier for the test result.
+ * @property {string} method - The name of the API method tested.
+ * @property {string} url - The URL used for the API call (may be empty if handled internally).
+ * @property {Record<string, string>} params - The parameters sent with the API call.
+ * @property {any} response - The raw or parsed response from the API.
+ * @property {number} status - The HTTP status code of the response.
+ * @property {Date} timestamp - The timestamp when the test was executed.
+ * @property {boolean} success - Indicates if the API call was successful.
+ * @property {string} [error] - An error message if the API call failed.
+ */
 interface TestResult {
   id: string
   method: string
@@ -38,23 +64,40 @@ interface TestResult {
   error?: string
 }
 
-const API_BASE_URL = "https://constelia.ai/api.php"
-
+/**
+ * @function ApiTestDashboard
+ * @description A dashboard component for testing various API methods.
+ * Allows users to select methods, input parameters, execute calls, and view results.
+ * @param {ApiTestDashboardProps} props - The component props.
+ * @returns {JSX.Element} The API test console UI.
+ */
 export function ApiTestDashboard({ apiKey, handleApiRequest }: ApiTestDashboardProps) {
   const [selectedMethod, setSelectedMethod] = useState<ApiMethod | null>(null)
-  const [methodParams, setMethodParams] = useState<Record<string, string>>({})
-  const [testResults, setTestResults] = useState<TestResult[]>([])
-  const [loading, setLoading] = useState(false)
-  const [selectedCategory, setSelectedCategory] = useState("all")
+  const [methodParams, setMethodParams] = useState<Record<string, string>>({}) // State to hold parameter values for the selected method
+  const [testResults, setTestResults] = useState<TestResult[]>([]) // State to store the history of test results
+  const [loading, setLoading] = useState(false) // State to indicate if an API call is in progress
+  const [selectedCategory, setSelectedCategory] = useState("all") // State for filtering methods by category
   const { toast } = useToast()
 
-  // Memoizing categories to prevent recalculation on every render.
+  /**
+   * @description Memoizes the list of unique API categories to prevent recalculation on every render.
+   */
   const categories = useMemo(() => ["all", ...Array.from(new Set(allApiMethods.map((m) => m.category)))], [])
 
+  /**
+   * @description Memoizes the list of API methods filtered by the selected category.
+   */
   const filteredMethods = useMemo(() =>
     selectedCategory === "all" ? allApiMethods : allApiMethods.filter((m) => m.category === selectedCategory)
   , [selectedCategory])
 
+  /**
+   * @function executeApiCall
+   * @description Executes the selected API method with the provided parameters and records the result.
+   * Handles both GET and POST requests based on the method name.
+   * @param {ApiMethod} method - The API method to execute.
+   * @returns {Promise<void>}
+   */
   const executeApiCall = async (method: ApiMethod) => {
     if (!apiKey) {
       toast({ title: "API Key Required", description: "Please provide your API key.", variant: "destructive" })
@@ -64,44 +107,42 @@ export function ApiTestDashboard({ apiKey, handleApiRequest }: ApiTestDashboardP
     setLoading(true)
     const testId = Date.now().toString()
 
-    const params: Record<string, string> = { cmd: method.name };
-    Object.entries(methodParams).forEach(([key, value]) => {
-      if (value.trim()) {
-        params[key] = value;
-      }
-    });
+    const params: Record<string, any> = { cmd: method.name };
+    let postData: Record<string, any> | undefined = undefined;
+    let requestMethod: "GET" | "POST" = "GET"; // Renamed to avoid conflict with 'method' parameter
 
-    const result = await handleApiRequest(params);
+    // Special handling for POST methods like 'updateScript' or 'teachConstelia'
+    if (method.name === "updateScript" || method.name === "teachConstelia") {
+      requestMethod = "POST";
+      postData = {};
+      Object.entries(methodParams).forEach(([key, value]) => {
+        if (value.trim()) {
+          postData![key] = value; // Use postData for POST parameters
+        }
+      });
+    } else {
+      Object.entries(methodParams).forEach(([key, value]) => {
+        if (value.trim()) {
+          params[key] = value; // Use params for GET parameters
+        }
+      });
+    }
+
+    const result = await handleApiRequest(params, requestMethod, postData);
 
     if (result) {
-      try {
-        const parsedResponse = JSON.parse(result);
-        const testResult: TestResult = {
-          id: testId,
-          method: method.name,
-          url: "", // URL is now handled by handleApiRequest
-          params: methodParams,
-          response: parsedResponse,
-          status: 200, // Assuming 200 for successful parse
-          timestamp: new Date(),
-          success: true,
-          error: undefined,
-        };
-        setTestResults((prev) => [testResult, ...prev]);
-      } catch (e) {
-        const testResult: TestResult = {
-          id: testId,
-          method: method.name,
-          url: "", // URL is now handled by handleApiRequest
-          params: methodParams,
-          response: result,
-          status: 200, // Still consider it a success if it's just text
-          timestamp: new Date(),
-          success: true,
-          error: undefined,
-        };
-        setTestResults((prev) => [testResult, ...prev]);
-      }
+      const testResult: TestResult = {
+        id: testId,
+        method: method.name,
+        url: "", // URL is now handled by handleApiRequest
+        params: methodParams,
+        response: result,
+        status: result.code || 200, // Use result.code if available, otherwise 200
+        timestamp: new Date(),
+        success: true,
+        error: undefined,
+      };
+      setTestResults((prev) => [testResult, ...prev]);
     } else {
       const testResult: TestResult = {
         id: testId,
@@ -115,11 +156,17 @@ export function ApiTestDashboard({ apiKey, handleApiRequest }: ApiTestDashboardP
         error: "API call failed or returned no data.",
       };
       setTestResults((prev) => [testResult, ...prev]);
-      toast({ title: "Request Failed", description: "API call failed or returned no data.", variant: "destructive" });
+      // toast notification is already handled by handleApiRequest in the parent component
     }
     setLoading(false);
   }
 
+  /**
+   * @function handleMethodSelect
+   * @description Sets the currently selected API method and initializes its parameters with default values.
+   * @param {ApiMethod} method - The API method to select.
+   * @returns {void}
+   */
   const handleMethodSelect = (method: ApiMethod) => {
     setSelectedMethod(method)
     const params: Record<string, string> = {}
@@ -137,7 +184,12 @@ export function ApiTestDashboard({ apiKey, handleApiRequest }: ApiTestDashboardP
     setMethodParams(params)
   }
 
-  // Using async/await for cleaner clipboard interaction.
+  /**
+   * @function copyToClipboard
+   * @description Copies the given text to the clipboard and shows a toast notification.
+   * @param {string} text - The text to copy.
+   * @returns {Promise<void>}
+   */
   const copyToClipboard = async (text: string) => {
     try {
       await navigator.clipboard.writeText(text)
@@ -147,6 +199,11 @@ export function ApiTestDashboard({ apiKey, handleApiRequest }: ApiTestDashboardP
     }
   }
 
+  /**
+   * @function downloadResults
+   * @description Downloads the current test results as a JSON file.
+   * @returns {void}
+   */
   const downloadResults = () => {
     if (testResults.length === 0) return
     const data = JSON.stringify(testResults, null, 2)
@@ -155,12 +212,17 @@ export function ApiTestDashboard({ apiKey, handleApiRequest }: ApiTestDashboardP
     const a = document.createElement("a")
     a.href = url
     a.download = `constelia-api-test-results-${new Date().toISOString().split("T")[0]}.json`
-    document.body.appendChild(a) // Required for Firefox
+    document.body.appendChild(a) // Required for Firefox to trigger download
     a.click()
     a.remove()
     URL.revokeObjectURL(url)
   }
 
+  /**
+   * @function clearResults
+   * @description Clears all recorded test results from the state.
+   * @returns {void}
+   */
   const clearResults = () => {
     setTestResults([])
   }
@@ -180,6 +242,7 @@ export function ApiTestDashboard({ apiKey, handleApiRequest }: ApiTestDashboardP
 
   return (
     <div className="space-y-8">
+      {/* Header section with title and action buttons */}
       <div className="flex items-center justify-between">
         <div className="space-y-1">
           <h2 className="text-2xl font-bold text-gray-100">API Test Console</h2>
@@ -207,13 +270,16 @@ export function ApiTestDashboard({ apiKey, handleApiRequest }: ApiTestDashboardP
         </div>
       </div>
 
+      {/* Main content grid for API methods and test results */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        {/* Left column: API method selection and configuration */}
         <div className="space-y-6">
           <Card className="bg-gray-900 border-gray-800">
             <CardHeader className="pb-4">
               <CardTitle className="text-gray-100">API Methods</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
+              {/* Category filter buttons */}
               <div className="flex flex-wrap gap-2">
                 {categories.map((category) => (
                   <Button
@@ -236,6 +302,7 @@ export function ApiTestDashboard({ apiKey, handleApiRequest }: ApiTestDashboardP
 
           <Card className="bg-gray-900 border-gray-800">
             <CardContent className="p-0">
+              {/* Scrollable area for API method list */}
               <ScrollArea className="h-96">
                 <div className="p-4 space-y-2">
                   {filteredMethods.map((method) => (
@@ -271,6 +338,7 @@ export function ApiTestDashboard({ apiKey, handleApiRequest }: ApiTestDashboardP
             </CardContent>
           </Card>
 
+          {/* Configuration panel for the selected method */}
           {selectedMethod && (
             <Card className="bg-gray-900 border-gray-800">
               <CardHeader>
@@ -318,6 +386,7 @@ export function ApiTestDashboard({ apiKey, handleApiRequest }: ApiTestDashboardP
           )}
         </div>
 
+        {/* Right column: Display of test results */}
         <div className="space-y-6" id="test-results">
           <Card className="bg-gray-900 border-gray-800">
             <CardHeader>
@@ -379,11 +448,7 @@ export function ApiTestDashboard({ apiKey, handleApiRequest }: ApiTestDashboardP
                           <div>
                             <Label className="text-sm text-gray-400">Response:</Label>
                             <Textarea
-                              value={
-                                typeof result.response === "string"
-                                  ? result.response
-                                  : JSON.stringify(result.response, null, 2)
-                              }
+                              value={typeof result.response === "string" ? result.response : JSON.stringify(result.response, null, 2)}
                               readOnly
                               className="mt-1 min-h-[120px] font-mono text-xs bg-gray-800 border-gray-700 text-gray-100"
                             />

@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Key, AlertCircle, User, Loader2, Eye, EyeOff } from "lucide-react"
+import { Key, AlertCircle, User, Loader2, Eye, EyeOff, ChevronLeft, ChevronRight } from "lucide-react"
 import { Sidebar } from "@/components/sidebar"
 import { UserInfoDisplay } from "@/components/user-info-display"
 import { UserInfoSkeleton } from "@/components/user-info-skeleton"
@@ -21,7 +21,34 @@ import { MemberDashboard } from "@/components/member-dashboard"
 import { SettingsDashboard } from "@/components/settings-dashboard"
 import { useToast } from "@/hooks/use-toast"
 
-// Define a more precise interface for the UserInfo object.
+import { callApi } from "@/lib/api";
+
+/**
+ * @interface UserInfo
+ * @description Defines the structure for user information retrieved from the API.
+ * @property {string} username - The user's username.
+ * @property {number} level - The user's level.
+ * @property {number} protection - The user's protection level.
+ * @property {string} [protection_name] - The name of the protection level.
+ * @property {string} [register_date] - The user's registration date.
+ * @property {number} [posts] - The number of posts made by the user.
+ * @property {number} [score] - The user's score.
+ * @property {string} [custom_title] - The user's custom title.
+ * @property {string[] | string} [groups] - The user's groups.
+ * @property {string} [avatar] - URL to the user's avatar.
+ * @property {number} [xp] - The user's experience points.
+ * @property {number} [buddy] - Buddy status.
+ * @property {number} [discord] - Discord ID.
+ * @property {number} [key_link] - Link key.
+ * @property {number} [key_stop] - Stop key.
+ * @property {any[]} [steam] - Array of Steam accounts.
+ * @property {any[]} [scripts] - Array of scripts.
+ * @property {any} [bans] - Ban information.
+ * @property {any[]} [rolls] - Loot roll history.
+ * @property {any[]} [uploads] - Upload history.
+ * @property {any[]} [bonks] - Bonk history.
+ * @property {number} [last_roll] - Timestamp of the last loot roll.
+ */
 interface UserInfo {
   username: string
   level: number
@@ -47,8 +74,12 @@ interface UserInfo {
   last_roll?: number
 }
 
-const API_BASE_URL = "https://constelia.ai/api.php"
-
+/**
+ * @function ConstellaControlApp
+ * @description The main application component for Fantasy.Comet2.
+ * Manages API key, user information, navigation, and displays various dashboards.
+ * @returns {JSX.Element} The main application UI.
+ */
 export default function ConstellaControlApp() {
   const [apiKey, setApiKey] = useState("")
   const [showApiKey, setShowApiKey] = useState(false)
@@ -56,8 +87,12 @@ export default function ConstellaControlApp() {
   const [loadingUserInfo, setLoadingUserInfo] = useState(false)
   const [activeCategory, setActiveCategory] = useState("scripts")
   const [isBuddyModeEnabled, setIsBuddyModeEnabled] = useState(false)
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
   const { toast } = useToast()
 
+  /**
+   * @description Loads saved API key and buddy mode setting from local storage on component mount.
+   */
   useEffect(() => {
     const savedKey = localStorage.getItem("constelia-api-key")
     if (savedKey) {
@@ -69,10 +104,22 @@ export default function ConstellaControlApp() {
     }
   }, [])
 
-  // Centralized API request handler for consistency.
+  /**
+   * @constant API_KEY_REGEX
+   * @description Regular expression to validate the format of the API key.
+   */
   const API_KEY_REGEX = /^[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/;
 
-  const handleApiRequest = useCallback(async (params: Record<string, string>) => {
+  /**
+   * @function handleApiRequest
+   * @description Centralized handler for all API requests.
+   * Validates the API key, calls the `callApi` utility, and handles generic errors.
+   * @param {Record<string, any>} params - Query parameters for the API request.
+   * @param {"GET" | "POST"} [method="GET"] - HTTP method for the request.
+   * @param {Record<string, any>} [postData] - Data to be sent in the request body for POST requests.
+   * @returns {Promise<any | null>} The API response data or null if an error occurred.
+   */
+  const handleApiRequest = useCallback(async (params: Record<string, any>, method: "GET" | "POST" = "GET", postData?: Record<string, any>) => {
     if (!apiKey) {
       console.log("handleApiRequest: No API key, returning null.");
       return null;
@@ -83,26 +130,21 @@ export default function ConstellaControlApp() {
       return null;
     }
     console.log("handleApiRequest: Valid API key, proceeding with request.");
-    const urlParams = new URLSearchParams({ key: apiKey, ...params })
-    const url = `${API_BASE_URL}?${urlParams.toString()}`
 
-    try {
-      const res = await fetch(url)
-      const responseText = await res.text()
-      if (!res.ok) throw new Error(responseText || `HTTP ${res.status}`)
-      
-      const preMatch = responseText.match(/<pre>([\s\S]*?)<\/pre>/)
-      return preMatch ? preMatch[1].trim() : responseText.trim()
-    } catch (err) {
-      const rawErrorMessage = err instanceof Error ? err.message : "An unknown error occurred.";
-      const userFriendlyMessage = rawErrorMessage.includes("API is not available because there is not an active Session for this license key")
-        ? "You need to register a session on the forum."
-        : rawErrorMessage;
-      toast({ title: "API Error", description: userFriendlyMessage, variant: "destructive" });
+    const result = await callApi(apiKey, params, toast, method, postData);
+
+    if (result && result.error) {
       return null;
     }
+    return result;
   }, [apiKey, toast])
 
+  /**
+   * @function fetchUserInfo
+   * @description Fetches user information from the API using the provided API key.
+   * Updates the `userInfo` state and handles loading/error states.
+   * @returns {Promise<void>}
+   */
   const fetchUserInfo = useCallback(async () => {
     if (!apiKey) {
       console.log("fetchUserInfo: No API key, returning.");
@@ -117,14 +159,13 @@ export default function ConstellaControlApp() {
     }
     console.log("fetchUserInfo: Valid API key, proceeding to fetch.");
     setLoadingUserInfo(true)
-    const result = await handleApiRequest({ cmd: "getMember", flags: "scripts&xp&beautify&bans&rolls&uploads&bonks" })
+    const result = await handleApiRequest({ cmd: "getMember", scripts: "1", xp: "1", beautify: "1", bans: "1", rolls: "1", uploads: "1", bonks: "1" })
     if (result) {
       try {
-        const data = JSON.parse(result)
-        if (data.error || data.message) {
-          throw new Error(data.error || data.message)
+        if (result.error || result.message) {
+          throw new Error(result.error || result.message)
         }
-        setUserInfo(data)
+        setUserInfo(result)
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : "Failed to parse user data."
         toast({ title: "Error", description: errorMessage, variant: "destructive" })
@@ -134,18 +175,31 @@ export default function ConstellaControlApp() {
     setLoadingUserInfo(false)
   }, [apiKey, handleApiRequest, toast])
 
+  /**
+   * @description Fetches user information on component mount and whenever `fetchUserInfo` changes.
+   */
   useEffect(() => {
     fetchUserInfo()
   }, [fetchUserInfo])
 
+  /**
+   * @function saveApiKey
+   * @description Saves the current API key to local storage and re-fetches user information.
+   * @returns {void}
+   */
   const saveApiKey = () => {
     if (apiKey) {
       localStorage.setItem("constelia-api-key", apiKey)
       toast({ title: "API Key Saved", description: "Your API key has been saved locally." })
-      fetchUserInfo() // Re-fetch user info with the new key
+      fetchUserInfo()
     }
   }
 
+  /**
+   * @function renderDashboard
+   * @description Renders the active dashboard component based on the `activeCategory` state.
+   * @returns {JSX.Element} The dashboard component to display.
+   */
   const renderDashboard = () => {
     switch (activeCategory) {
       case "scripts": return <ScriptsDashboard apiKey={apiKey} handleApiRequest={handleApiRequest} isActive={activeCategory === "scripts"} />
@@ -161,53 +215,73 @@ export default function ConstellaControlApp() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-950 text-white">
-      <main className="max-w-7xl mx-auto px-6 py-8">
-        <div className="mb-8 text-center">
-          <h1 className="text-4xl font-bold bg-gradient-to-r from-purple-400 to-blue-400 bg-clip-text text-transparent animate-pulse-custom">
-            Fantasy.Comet2
-          </h1>
-          <p className="text-gray-400 mt-2">Unlock your gaming potential! Explore powerful tools, enhance your gameplay, and dominate the competition.</p>
-        </div>
-        
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
-          <aside className="lg:col-span-1 space-y-6">
-            <Card className="bg-gray-900 border-gray-800">
-              <CardHeader>
-                <CardTitle className="text-lg font-semibold text-gray-200">Categories</CardTitle>
-              </CardHeader>
-              <CardContent className="p-6">
-                <Sidebar activeCategory={activeCategory} onCategoryChange={setActiveCategory} />
-              </CardContent>
-            </Card>
+    <div className="min-h-screen bg-gray-950 text-white flex">
+      {/* Button to toggle sidebar collapse state */}
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+        className="fixed top-4 left-4 z-50 h-8 w-8 p-0"
+      >
+        {isSidebarCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+      </Button>
+
+      {/* Sidebar navigation area */}
+      <aside className={`${isSidebarCollapsed ? 'w-20' : 'w-64'} transition-all duration-300 ease-in-out flex-shrink-0 bg-gray-900 border-r border-gray-800 p-4 pt-16`}>
+        <Card className="bg-gray-900 border-gray-800">
+          <CardHeader>
+            <CardTitle className="text-lg font-semibold text-gray-200">Categories</CardTitle>
+          </CardHeader>
+          <CardContent className="p-6">
+            <Sidebar activeCategory={activeCategory} onCategoryChange={setActiveCategory} isCollapsed={isSidebarCollapsed} />
+          </CardContent>
+        </Card>
+      </aside>
+
+      {/* Main content area, flexible to fill remaining space */}
+      <div className="flex-1 flex flex-col">
+        {/* Application header */}
+        <header className="bg-gray-900 border-b border-gray-800 p-4 flex items-center justify-between flex-shrink-0">
+          <div className="flex-1">
+            <h1 className="text-2xl font-bold bg-gradient-to-r from-purple-400 to-blue-400 bg-clip-text text-transparent">
+              Fantasy.Comet2
+            </h1>
+            <p className="text-gray-400 text-sm">Unlock your gaming potential! Explore powerful tools, enhance your gameplay, and dominate the competition.</p>
+          </div>
+          {/* Section for user info display or API key input */}
+          <div className="flex-shrink-0 ml-4">
             {userInfo ? (
-              <UserInfoDisplay userInfo={userInfo} apiKey={apiKey} handleApiRequest={handleApiRequest} />
+              <UserInfoDisplay userInfo={userInfo} apiKey={apiKey} handleApiRequest={handleApiRequest} isCollapsed={false} variant="header" />
             ) : loadingUserInfo ? (
-              <UserInfoSkeleton />
+              <UserInfoSkeleton isCollapsed={false} variant="header" />
             ) : (
-              <Card className="bg-gray-900 border-gray-800">
-                <CardHeader className="pb-4">
-                  <CardTitle className="flex items-center gap-2 text-gray-100"><Key className="h-5 w-5" />API Key</CardTitle>
+              <Card className="bg-gray-900 border-gray-800 flex-1 max-w-xs">
+                <CardHeader className="pb-2 pt-2">
+                  <CardTitle className="flex items-center gap-2 text-gray-100 text-base"><Key className="h-4 w-4" />API Key</CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-4 pt-0">
-                  <div className="space-y-3">
-                    <Label htmlFor="api-key" className="text-gray-300">License Key</Label>
-                    <div className="flex gap-2">
+                <CardContent className="space-y-2 pt-0 pb-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="api-key" className="text-gray-300 text-xs">License Key</Label>
+                    <div className="flex gap-1">
                       <div className="relative flex-1">
-                        <Input id="api-key" type={showApiKey ? "text" : "password"} placeholder="Enter your Constelia license key" value={apiKey} onChange={(e) => setApiKey(e.target.value)} className="bg-gray-800 border-gray-700 text-gray-100 pr-10 h-9" />
-                        <Button variant="ghost" size="sm" onClick={() => setShowApiKey(!showApiKey)} className="absolute right-1 top-1 h-7 w-7 text-gray-400 hover:text-gray-200">{showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</Button>
+                        <Input id="api-key" type={showApiKey ? "text" : "password"} placeholder="Enter your Constelia license key" value={apiKey} onChange={(e) => setApiKey(e.target.value)} className="bg-gray-800 border-gray-700 text-gray-100 pr-8 h-8 text-sm" />
+                        <Button variant="ghost" size="sm" onClick={() => setShowApiKey(!showApiKey)} className="absolute right-0 top-0 h-7 w-7 text-gray-400 hover:text-gray-200"><span className="sr-only">Toggle API Key visibility</span>{showApiKey ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}</Button>
                       </div>
-                      <Button onClick={saveApiKey} variant="outline" size="sm" className="border-gray-700 text-gray-300 hover:bg-gray-800 bg-transparent h-9">Save</Button>
+                      <Button onClick={saveApiKey} variant="outline" size="sm" className="border-gray-700 text-gray-300 hover:bg-gray-800 bg-transparent h-8 text-sm">Save</Button>
                     </div>
                   </div>
-                  <Alert><AlertCircle className="h-4 w-4" /><AlertDescription className="text-sm">Your API key is stored locally and only sent to Constelia.ai.</AlertDescription></Alert>
+                  <Alert className="p-2"><AlertCircle className="h-3 w-3" /><AlertDescription className="text-xs">Your API key is stored locally and only sent to Constelia.ai.</AlertDescription></Alert>
                 </CardContent>
               </Card>
             )}
-          </aside>
-          <section className="lg:col-span-4">{renderDashboard()}</section>
-        </div>
-      </main>
+          </div>
+        </header>
+
+        {/* Main content area for dashboards */}
+        <main className="flex-1 p-8 overflow-auto">
+          {renderDashboard()}
+        </main>
+      </div>
     </div>
   )
 }

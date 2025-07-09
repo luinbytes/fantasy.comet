@@ -40,11 +40,9 @@ import {
 import type { JSX } from "react/jsx-runtime"
 
 // Centralized API URL and request handler for consistency.
-const API_BASE_URL = "https://constelia.ai/api.php"
-
 interface ConfigDashboardProps {
   apiKey: string;
-  handleApiRequest: (params: Record<string, string>, options?: RequestInit) => Promise<string | null>;
+  handleApiRequest: (params: Record<string, any>, method?: "GET" | "POST", postData?: Record<string, any>) => Promise<any | null>;
 }
 
 interface ConfigData {
@@ -62,36 +60,37 @@ export function ConfigDashboard({ apiKey, handleApiRequest }: ConfigDashboardPro
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set())
   const { toast } = useToast()
 
-  
-
   const fetchConfig = useCallback(async () => {
     setLoading(true)
     setError(null)
-    const responseText = await handleApiRequest({ cmd: "getConfiguration" });
-    if (responseText !== null) {
-      setRawConfig(responseText)
+    const result = await handleApiRequest({ cmd: "getConfiguration" }); // result will be raw text or { error: ... }
+    if (result && typeof result === 'string') { // Check if it's a string (raw config)
+      setRawConfig(result);
       try {
-        setConfig(responseText.trim() ? JSON.parse(responseText) : null)
+        setConfig(result.trim() ? JSON.parse(result) : null);
       } catch {
-        setConfig(null) // Not valid JSON
+        setConfig(null); // Not valid JSON
       }
+    } else if (result && result.error) { // Handle error object from callApi
+      setError(result.error);
+      setConfig(null);
+    } else { // No result or unexpected
+      setConfig(null);
+      setRawConfig("");
     }
-    setLoading(false)
+    setLoading(false);
   }, [handleApiRequest])
 
   const saveConfig = async (configData: string) => {
     setSaving(true)
     const result = await handleApiRequest(
       { cmd: "setConfiguration" },
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: `value=${encodeURIComponent(configData)}`,
-      }
+      "POST",
+      { value: configData } // postData
     )
     setSaving(false)
 
-    if (result !== null) {
+    if (result) { // result will be JSON object or { error: ... }
       toast({ title: "Success", description: "Configuration saved successfully." })
       await fetchConfig()
       setEditingRaw(false)
@@ -100,10 +99,10 @@ export function ConfigDashboard({ apiKey, handleApiRequest }: ConfigDashboardPro
 
   const resetConfig = async () => {
     setSaving(true)
-    const result = await handleApiRequest("resetConfiguration")
+    const result = await handleApiRequest({ cmd: "resetConfiguration" }) // Pass params as object
     setSaving(false)
 
-    if (result !== null) {
+    if (result) { // result will be JSON object or { error: ... }
       toast({ title: "Success", description: "Configuration has been reset." })
       await fetchConfig()
     }
@@ -149,37 +148,89 @@ export function ConfigDashboard({ apiKey, handleApiRequest }: ConfigDashboardPro
   }
 
   const renderConfigValue = (value: any, path: string[]): JSX.Element => {
-    const key = path.join('-')
+    const key = path.join('-'); // Unique key for React
     const settingName = path[path.length - 1]; // Get the actual setting name
 
     if (typeof value === "boolean") {
-      return <Switch key={key} checked={value} onCheckedChange={(checked) => updateConfigValue(path, checked)} />
+      return <Switch key={key} checked={value} onCheckedChange={(checked) => updateConfigValue(path, checked)} />;
     }
     if (typeof value === "number") {
-      return <Input key={key} type="number" value={value} onChange={(e) => updateConfigValue(path, parseFloat(e.target.value) || 0)} className="bg-gray-800 border-gray-700 text-gray-100 w-32" />
+      return <Input key={key} type="number" value={value} onChange={(e) => updateConfigValue(path, parseFloat(e.target.value) || 0)} className="bg-gray-800 border-gray-700 text-gray-100 w-32" />;
     }
     if (typeof value === "string") {
       // Heuristic for color strings
       if (settingName.includes("color") && value.match(/^[0-9A-Fa-f]{6,8}$/)) {
-        // This is a basic text input for hex colors. A proper color picker would be ideal.
-        return <Input key={key} value={value} onChange={(e) => updateConfigValue(path, e.target.value)} className="bg-gray-800 border-gray-700 text-gray-100" />
+        return (
+          <div key={key} className="flex items-center gap-2">
+            <Input
+              type="color"
+              value={`#${value}`}
+              onChange={(e) => updateConfigValue(path, e.target.value.substring(1))}
+              className="h-8 w-8 p-0 border-none"
+            />
+            <Input
+              value={value}
+              onChange={(e) => updateConfigValue(path, e.target.value)}
+              className="bg-gray-800 border-gray-700 text-gray-100 flex-1"
+            />
+          </div>
+        );
       }
       // For other strings, including toggle_key
-      return <Input key={key} value={value} onChange={(e) => updateConfigValue(path, e.target.value)} className="bg-gray-800 border-gray-700 text-gray-100" />
+      return <Input key={key} value={value} onChange={(e) => updateConfigValue(path, e.target.value)} className="bg-gray-800 border-gray-700 text-gray-100" />;
     }
     if (Array.isArray(value)) {
       // Assuming arrays are arrays of numbers for now (like 'bones')
-      // Render as a comma-separated string in a textarea for editing
       return (
-        <Textarea
-          key={key}
-          value={value.join(', ')}
-          onChange={(e) => updateConfigValue(path, e.target.value)}
-          className="bg-gray-800 border-gray-700 text-gray-100 min-h-[40px]"
-        />
-      )
+        <div key={key} className="flex flex-wrap items-center gap-2">
+          {value.map((item, index) => (
+            <Badge key={index} variant="secondary" className="bg-gray-800 text-gray-300 flex items-center gap-1">
+              {item}
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-4 w-4 p-0 text-gray-400 hover:text-white"
+                onClick={() => {
+                  const newArray = [...value];
+                  newArray.splice(index, 1);
+                  updateConfigValue(path, newArray);
+                }}
+              >
+                <X className="h-3 w-3" />
+              </Button>
+            </Badge>
+          ))}
+          <Input
+            type="number"
+            placeholder="Add new..."
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                const newValue = parseInt(e.currentTarget.value);
+                if (!isNaN(newValue) && !value.includes(newValue)) {
+                  updateConfigValue(path, [...value, newValue]);
+                  e.currentTarget.value = ''; // Clear input
+                }
+              }
+            }}
+            className="bg-gray-800 border-gray-700 text-gray-100 w-24"
+          />
+        </div>
+      );
     }
-    return <span key={key} className="text-gray-400 text-sm">Complex object</span>
+    // If it's an object (nested configuration), render its properties recursively
+    if (typeof value === "object" && value !== null) {
+      return (
+        <div key={key} className="space-y-2">
+          {Object.entries(value).map(([nestedKey, nestedValue]) => (
+            <div key={nestedKey} className="flex items-center justify-between">
+              <Label className="text-sm font-medium text-gray-300">{nestedKey}</Label>
+              {renderConfigValue(nestedValue, [...path, nestedKey])}
+            </div>
+          ))}
+        </div>
+      );
+    }
+    return <span key={key} className="text-gray-400 text-sm">Unsupported type</span>;
   }
 
   if (!apiKey) {
