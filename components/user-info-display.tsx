@@ -114,7 +114,7 @@ export function UserInfoDisplay({ userInfo, apiKey, handleApiRequest }: UserInfo
       <CardContent className="space-y-3 pt-0">
         <div className="flex items-center space-x-4">
           <Avatar className="h-12 w-12 flex-shrink-0">
-            <AvatarImage src={userInfo.avatar} alt={userInfo.username} />
+            <AvatarImage src={userInfo.avatar} alt={userInfo.username} referrerPolicy="no-referrer" />
             <AvatarFallback>
               {userInfo.username.substring(0, 2).toUpperCase()}
             </AvatarFallback>
