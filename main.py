@@ -472,13 +472,28 @@ class CometApp(App):
         border: solid #8a2be2;
         background: #2a004d;
         color: #ffffff;
-        height: auto;
-        max-height: 10%; /* Adjust as needed */
+        height: 5; /* Explicit height for ListView */
         dock: bottom;
         overflow-y: auto; /* Enable vertical scrolling */
     }
     ListView > .list-item {
         padding: 0 1; /* Add some padding to list items */
+        background: #3a005d; /* Explicit background for list items */
+        color: #ffffff; /* Explicit text color for list items */
+        height: 1; /* Explicit height for list items */
+        border: solid red; /* Add a red border for debugging */
+    }
+    ListView > .list-item--highlight {
+        background: #6a00b0;
+    }
+    ListView > .list-item--highlight .list-item__label {
+        text-style: bold;
+    }
+    ListView > .list-item .list-item__label {
+        color: #ffffff; /* Ensure label text is white */
+        display: block; /* Ensure label takes up block space */
+        width: 100%; /* Ensure label takes full width of list item */
+        border: solid blue; /* Add a blue border for debugging */
     }
     """
 
@@ -486,10 +501,12 @@ class CometApp(App):
         ("d", "toggle_dark", "Toggle dark mode"),
         ("q", "quit", "Quit"),
         ("c", "clear", "Clear output"),
+        ("tab", "tab", "Complete"),
     ]
 
     api_key = reactive(None)
     suggestion_list: ListView | None = None
+    suggestions = reactive([])
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True, name="☄️ Comet CLI ☄️")
@@ -497,7 +514,7 @@ class CometApp(App):
             self.output_log = RichLog(id="output_log", auto_scroll=True)
             self.api_response_tree = JsonTree("api_response_tree", {}, id="api_response_tree", show_root=False)
             self.command_input = Input(placeholder="Enter command here...", id="command_input")
-            self.suggestion_list = ListView(id="suggestion_list", classes="hidden")
+            self.suggestion_list = ListView(id="suggestion_list")
             yield self.output_log
             yield self.api_response_tree
             yield self.command_input
@@ -542,15 +559,15 @@ class CometApp(App):
 
     def on_input_changed(self, event: Input.Changed) -> None:
         text = event.value.strip().lower()
-        suggestions = []
         if text:
-            for cmd in API_METHODS.keys():
-                if cmd.lower().startswith(text):
-                    suggestions.append(ListItem(cmd))
-        
+            self.suggestions = [cmd for cmd in API_METHODS.keys() if cmd.lower().startswith(text)]
+        else:
+            self.suggestions = []
+
+    def watch_suggestions(self, suggestions: list[str]) -> None:
         self.suggestion_list.clear()
         if suggestions:
-            self.suggestion_list.extend(suggestions)
+            self.suggestion_list.extend([ListItem(Label(cmd)) for cmd in suggestions])
             self.suggestion_list.display = True
         else:
             self.suggestion_list.display = False
