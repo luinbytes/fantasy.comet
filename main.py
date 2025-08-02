@@ -1,776 +1,317 @@
-import requests
-import os
+import sys
+import asyncio
+import importlib
 import json
+from rich.pretty import pretty_repr
+from rich.syntax import Syntax
 from textual.app import App, ComposeResult
-from textual.widgets import Header, Footer, Input, RichLog, ListView, ListItem, Label
-from textual.containers import Container
+from textual.widgets import Input, Static, Header, Footer, Log
+from textual.containers import Vertical
 from textual.reactive import reactive
+from textual.message import Message
 
-from textual.widgets import Tree
-from textual.widgets.tree import TreeNode
-from rich.text import Text
+# Dynamically import API_METHODS and CATEGORIES
+api_mod = importlib.import_module("api_methods")
+API_METHODS = api_mod.API_METHODS
+CATEGORIES = api_mod.CATEGORIES
 
-class JsonTree(Tree):
-    """A Tree widget that can display JSON data."""
+# Helper for command/arg parsing
+class CommandParser:
+    def __init__(self, api_methods, categories):
+        self.api_methods = api_methods
+        self.categories = categories
+        self.commands = list(api_methods.keys())
+        self.cat_to_cmds = categories
+        self.cmd_to_cat = {cmd: cat for cat, cmds in categories.items() for cmd in cmds}
 
-    def __init__(self, name: str, data: dict | list, id: str | None = None, show_root: bool = True):
-        super().__init__(name, id=id)
-        self.data = data
-        self.show_root = show_root
-        super().__init__(name, id=id)
-        self.data = data
+    def get_commands(self, category=None):
+        if category and category in self.cat_to_cmds:
+            return self.cat_to_cmds[category]
+        return self.commands
 
-    def on_mount(self) -> None:
-        self.add_json_data(self.root, self.data)
+    def get_categories(self):
+        return list(self.cat_to_cmds.keys())
 
-    def add_json_data(self, node: TreeNode, data: dict | list | str | int | float | bool | None) -> None:
-        """Recursively adds JSON data to the tree."""
-        if isinstance(data, dict):
-            for key, value in data.items():
-                if isinstance(value, (dict, list)):
-                    new_node = node.add(Text(key, style="bold"))
-                    self.add_json_data(new_node, value)
-                else:
-                    node.add_leaf(Text(f"{key}: {value}", style="green"))
-        elif isinstance(data, list):
-            for index, value in enumerate(data):
-                if isinstance(value, (dict, list)):
-                    new_node = node.add(Text(f"[{index}]", style="bold"))
-                    self.add_json_data(new_node, value)
-                else:
-                    node.add_leaf(Text(f"[{index}]: {value}", style="green"))
-        else:
-            node.add_leaf(Text(str(data), style="green"))
+    def get_command_args(self, cmd):
+        return list(self.api_methods.get(cmd, {}).get("parameters", {}).keys())
 
+    def get_command_info(self, cmd):
+        return self.api_methods.get(cmd, {})
 
-# Base URL for the Constelia API
-BASE_URL = "https://constelia.ai/api.php"
+    def get_category_of(self, cmd):
+        return self.cmd_to_cat.get(cmd)
 
-# Configuration file path
-CONFIG_DIR = os.path.join(os.path.expanduser("~"), ".comet")
-CONFIG_FILE = os.path.join(CONFIG_DIR, "config.json")
-
-# Global variable for the API key (will be managed by the App)
-API_KEY = None
-
-# Categories for API methods
-CATEGORIES = {
-    "Handshake": ["getHandshake", "authorizeHandshake", "terminateHandshake"],
-    "Achievements": ["getAchievements", "redeemAchievements"],
-    "Builds": ["createBuild", "deleteBuild", "getBuilds"],
-    "Uploads": ["upload", "setUpload"],
-    "Settings": ["setLanguage", "setKeys", "setProtection", "resetConfiguration"],
-    "AI": ["heyConstelia", "teachConstelia"],
-    "FC2T Projects": ["getFC2TProjects", "getFC2TProject", "toggleProjectStatus", "setMemberProjects"],
-    "Member Management": ["deleteMinecraftWhitelist", "addMinecraftWhitelist", "getMemberAsBuddy", "hideSteamAccount", "showSteamAccount", "getMember"],
-    "Perks": ["respecPerks", "listPerks", "buyPerk", "changeVenus", "rollLoot", "getDivinityChart"],
-    "Scripts": ["toggleScriptStatus", "getScript", "getAllScripts", "updateScript", "setMemberScripts"],
-    "Software": ["getSoftware", "getAllSoftware"],
-    "Forum": ["getForumPosts", "sendCommand", "getConfiguration", "setConfiguration"]
-}
-
-# Placeholder for API methods. This will be populated dynamically.
-# Each method will have its name, description, parameters, and category.
-API_METHODS = {
-    "getHandshake": {
-        "description": "Retrieves a license key using a temporary unique code.",
-        "parameters": {"token": {"type": "string", "required": True}},
-        "example": "getHandshake --token UNIQUE_CODE_FROM_AUTHORIZE",
-        "category": "Handshake"
-    },
-    "authorizeHandshake": {
-        "description": "Creates a temporary unique code for your license key on the server.",
-        "parameters": {},
-        "example": "authorizeHandshake",
-        "category": "Handshake"
-    },
-    "terminateHandshake": {
-        "description": "Forcefully terminates your handshake.",
-        "parameters": {"token": {"type": "string", "required": True}},
-        "example": "terminateHandshake --token UNIQUE_CODE_FROM_AUTHORIZE",
-        "category": "Handshake"
-    },
-    "getAchievements": {
-        "description": "Lists all available achievements.",
-        "parameters": {},
-        "example": "getAchievements",
-        "category": "Achievements"
-    },
-    "redeemAchievements": {
-        "description": "Redeems achievement data. Requires POST data.",
-        "parameters": {"value": {"type": "string", "required": True, "post": True}},
-        "example": "redeemAchievements --value \"<achievements.dat content>\"",
-        "category": "Achievements"
-    },
-    "createBuild": {
-        "description": "Creates a new build or updates your current build.",
-        "parameters": {
-            "tag": {"type": "string", "required": False},
-            "private": {"type": "string", "required": False}
-        },
-        "example": "createBuild --tag mybuild --private typedef",
-        "category": "Builds"
-    },
-    "deleteBuild": {
-        "description": "Wipes your current build.",
-        "parameters": {"tag": {"type": "string", "required": False}},
-        "example": "deleteBuild --tag mybuild",
-        "category": "Builds"
-    },
-    "upload": {
-        "description": "Uploads a file to i.constelia.ai.",
-        "parameters": {
-            "expire": {"type": "int", "required": False},
-            "no_scramble": {"type": "bool", "required": False}
-        },
-        "example": "upload --file /path/to/your/file.txt --expire 60",
-        "category": "Uploads"
-    },
-    "setUpload": {
-        "description": "Changes the URL of an i.constelia.ai upload.",
-        "parameters": {
-            "old_url": {"type": "string", "required": True},
-            "new_url": {"type": "string", "required": True}
-        },
-        "example": "setUpload --old_url https://i.constelia.ai/old --new_url https://i.constelia.ai/new",
-        "category": "Uploads"
-    },
-    "setLanguage": {
-        "description": "Sets your language.",
-        "parameters": {"lang": {"type": "string", "required": False}},
-        "example": "setLanguage --lang en",
-        "category": "Settings"
-    },
-    "heyConstelia": {
-        "description": "Communicates with Constelia's trained AI.",
-        "parameters": {"message": {"type": "string", "required": True}},
-        "example": "heyConstelia --message \"Hello Constelia\"",
-        "category": "AI"
-    },
-    "teachConstelia": {
-        "description": "Teaches Constelia's trained AI custom information. Requires POST data.",
-        "parameters": {
-            "data": {"type": "string", "required": True, "post": True},
-            "info": {"type": "bool", "required": False},
-            "wipe": {"type": "bool", "required": False}
-        },
-        "example": "teachConstelia --data \"I love green apples\"",
-        "category": "AI"
-    },
-    "getFC2TProjects": {
-        "description": "Gets all FC2T projects.",
-        "parameters": {},
-        "example": "getFC2TProjects",
-        "category": "FC2T Projects"
-    },
-    "getFC2TProject": {
-        "description": "Gets an FC2T project by its ID.",
-        "parameters": {"id": {"type": "int", "required": True}},
-        "example": "getFC2TProject --id 1",
-        "category": "FC2T Projects"
-    },
-    "toggleProjectStatus": {
-        "description": "Enables/Disables an FC2T project.",
-        "parameters": {"id": {"type": "int", "required": True}},
-        "example": "toggleProjectStatus --id 1",
-        "category": "FC2T Projects"
-    },
-    "setMemberProjects": {
-        "description": "Enables/Disables multiple FC2T projects.",
-        "parameters": {"projects": {"type": "list", "required": True}},
-        "example": "setMemberProjects --projects [1,2,3]",
-        "category": "FC2T Projects"
-    },
-    "sendCommand": {
-        "description": "Sends commands to the Member's Panel and gets the result back.",
-        "parameters": {"command": {"type": "string", "required": True}},
-        "example": "sendCommand --command session",
-        "category": "Forum"
-    },
-    "getBuilds": {
-        "description": "Lists all available builds.",
-        "parameters": {},
-        "example": "getBuilds",
-        "category": "Builds"
-    },
-    "deleteMinecraftWhitelist": {
-        "description": "Removes a member's entry from the Minecraft whitelist.",
-        "parameters": {"owner": {"type": "string", "required": True}},
-        "example": "deleteMinecraftWhitelist --owner typedef",
-        "category": "Member Management"
-    },
-    "respecPerks": {
-        "description": "Removes all purchased perks at a cost of 3000 XP.",
-        "parameters": {},
-        "example": "respecPerks",
-        "category": "Perks"
-    },
-    "listPerks": {
-        "description": "Lists all perks in the system.",
-        "parameters": {},
-        "example": "listPerks",
-        "category": "Perks"
-    },
-    "buyPerk": {
-        "description": "Consumes a perk point to purchase a perk.",
-        "parameters": {"id": {"type": "int", "required": True}},
-        "example": "buyPerk --id 1",
-        "category": "Perks"
-    },
-    "changeVenus": {
-        "description": "Manages Venus perk related actions (status, request, withdraw).",
-        "parameters": {
-            "status": {"type": "bool", "required": False},
-            "request": {"type": "string", "required": False},
-            "withdraw": {"type": "bool", "required": False}
-        },
-        "example": "changeVenus --request MyBestFriend1337",
-        "category": "Perks"
-    },
-    "rollLoot": {
-        "description": "Rolls for loot related to the Abundance of Jupiter perk.",
-        "parameters": {"sim": {"type": "bool", "required": False}},
-        "example": "rollLoot --sim",
-        "category": "Perks"
-    },
-    "resetConfiguration": {
-        "description": "Safely deletes/resets the cloud configuration of a specific solution.",
-        "parameters": {},
-        "example": "resetConfiguration",
-        "category": "Settings"
-    },
-    "hideSteamAccount": {
-        "description": "Hides a Steam account from appearing in the Member's Panel.",
-        "parameters": {"name": {"type": "string", "required": True}},
-        "example": "hideSteamAccount --name mysteamloginusername",
-        "category": "Member Management"
-    },
-    "showSteamAccount": {
-        "description": "Allows a previously hidden Steam account to show.",
-        "parameters": {"name": {"type": "string", "required": True}},
-        "example": "showSteamAccount --name mysteamloginusername",
-        "category": "Member Management"
-    },
-    "setKeys": {
-        "description": "Sets your linking and panic/stop key.",
-        "parameters": {
-            "link": {"type": "int", "required": False},
-            "stop": {"type": "int", "required": False}
-        },
-        "example": "setKeys --link 122",
-        "category": "Settings"
-    },
-    "getSolution": {
-        "description": "Gets the raw executable for a constelia.ai solution.",
-        "parameters": {
-            "software": {"type": "string", "required": True},
-            "os": {"type": "string", "required": False}
-        },
-        "example": "getSolution --software universe4 --os linux",
-        "category": "Software"
-    },
-    "setProtection": {
-        "description": "Sets the protection method of the FC2 solution.",
-        "parameters": {"protection": {"type": "int", "required": True}},
-        "example": "setProtection --protection 1",
-        "category": "Settings"
-    },
-    "setMemberScripts": {
-        "description": "Sets multiple scripts on a license key.",
-        "parameters": {"scripts": {"type": "list", "required": True}},
-        "example": "setMemberScripts --scripts [140,141]",
-        "category": "Scripts"
-    },
-    "getDivinityChart": {
-        "description": "Gets the divinity chart in JSON format.",
-        "parameters": {"top5": {"type": "bool", "required": False}},
-        "example": "getDivinityChart --top5",
-        "category": "Perks"
-    },
-    "getMinecraftWhitelist": {
-        "description": "Lists all members who are allowed on the Minecraft community server.",
-        "parameters": {},
-        "example": "getMinecraftWhitelist",
-        "category": "Member Management"
-    },
-    "addMinecraftWhitelist": {
-        "description": "Adds/Updates a member to the Minecraft community server.",
-        "parameters": {
-            "name": {"type": "string", "required": True},
-            "owner": {"type": "string", "required": True},
-            "friend": {"type": "bool", "required": False}
-        },
-        "example": "addMinecraftWhitelist --name minecraftusername --owner typedef",
-        "category": "Member Management"
-    },
-    "getMemberAsBuddy": {
-        "description": "Returns member information for a buddy or VIP.",
-        "parameters": {"name": {"type": "string", "required": True}},
-        "example": "getMemberAsBuddy --name johnnyappleseed",
-        "category": "Member Management"
-    },
-    "toggleScriptStatus": {
-        "description": "Toggles a script on/off.",
-        "parameters": {"id": {"type": "int", "required": True}},
-        "example": "toggleScriptStatus --id 130",
-        "category": "Scripts"
-    },
-    "getSoftware": {
-        "description": "Gets information of a constelia.ai software.",
-        "parameters": {
-            "name": {"type": "string", "required": True},
-            "scripts": {"type": "bool", "required": False},
-            "checksum": {"type": "bool", "required": False}
-        },
-        "example": "getSoftware --name Constellation4 --scripts",
-        "category": "Software"
-    },
-    "getAllSoftware": {
-        "description": "Gets all information of all constelia.ai software.",
-        "parameters": {},
-        "example": "getAllSoftware",
-        "category": "Software"
-    },
-    "getForumPosts": {
-        "description": "Gets the latest forum posts.",
-        "parameters": {"count": {"type": "int", "required": True}},
-        "example": "getForumPosts --count 10",
-        "category": "Forum"
-    },
-    "getConfiguration": {
-        "description": "Gets your stored cloud configuration.",
-        "parameters": {},
-        "example": "getConfiguration",
-        "category": "Forum"
-    },
-    "setConfiguration": {
-        "description": "Sets your cloud configuration. Requires POST data.",
-        "parameters": {"value": {"type": "string", "required": True, "post": True}},
-        "example": "setConfiguration --value \"<json_config_data>\"",
-        "category": "Forum"
-    },
-    "getScript": {
-        "description": "Gets information about a script.",
-        "parameters": {
-            "id": {"type": "int", "required": True},
-            "source": {"type": "bool", "required": False},
-            "needs_sync": {"type": "bool", "required": False},
-            "needs_update": {"type": "bool", "required": False}
-        },
-        "example": "getScript --id 150 --source",
-        "category": "Scripts"
-    },
-    "getAllScripts": {
-        "description": "Gets all scripts.",
-        "parameters": {},
-        "example": "getAllScripts",
-        "category": "Scripts"
-    },
-    "updateScript": {
-        "description": "Updates a script you own or are a team member of. Requires POST data.",
-        "parameters": {
-            "script": {"type": "string", "required": True, "post": True},
-            "content": {"type": "string", "required": True, "post": True},
-            "notes": {"type": "string", "required": True, "post": True},
-            "categories": {"type": "list", "required": False, "post": True}
-        },
-        "example": "updateScript --script <script_id> --content \"new code\" --notes \"bug fix\" --categories [0,1]\"",
-        "category": "Scripts"
-    },
-    "getMember": {
-        "description": "Gets information about your membership.",
-        "parameters": {
-            "bans": {"type": "bool", "required": False},
-            "history": {"type": "bool", "required": False},
-            "scripts": {"type": "bool", "required": False},
-            "simple": {"type": "bool", "required": False},
-            "private": {"type": "bool", "required": False},
-            "xp": {"type": "bool", "required": False},
-            "rolls": {"type": "bool", "required": False},
-            "fc2t": {"type": "bool", "required": False},
-            "hashes": {"type": "bool", "required": False},
-            "uploads": {"type": "bool", "required": False},
-            "bonks": {"type": "bool", "required": False},
-            "achievements": {"type": "bool", "required": False}
-        },
-        "example": "getMember --scripts --history --bans",
-        "category": "Member Management"
-    }
-}
-
-def load_config():
-    """Loads configuration from the config file."""
-    if os.path.exists(CONFIG_FILE):
-        with open(CONFIG_FILE, 'r') as f:
-            return json.load(f)
-    return {}
-
-def save_config(config):
-    """Saves configuration to the config file."""
-    os.makedirs(CONFIG_DIR, exist_ok=True)
-    with open(CONFIG_FILE, 'w') as f:
-        json.dump(config, f, indent=4)
-
-def parse_arguments(args):
-    """Parses command-line arguments into a dictionary."""
-    parsed_args = {}
-    i = 0
-    while i < len(args):
-        arg = args[i]
-        if arg.startswith("--"):
-            key = arg[2:]
-            if i + 1 < len(args) and not args[i+1].startswith("--"):
-                value = args[i+1]
-                parsed_args[key] = value
-                i += 1
+    def complete(self, text):
+        # Returns (suggestions, context) for autocomplete
+        parts = text.strip().split()
+        if not parts or (parts[0] == "help" and len(parts) == 1):
+            return ["help"] + self.get_commands() + self.get_categories(), "root"
+        if parts[0] == "help":
+            if len(parts) == 2:
+                # help <category|command>
+                opts = self.get_categories() + self.get_commands()
+                return [o for o in opts if o.startswith(parts[1])], "help"
+            elif len(parts) >= 3:
+                # help <command> <arg...>
+                cmd = parts[1]
+                args = self.get_command_args(cmd)
+                already = set(parts[2:])
+                return [a for a in args if a not in already], "help_args"
             else:
-                parsed_args[key] = True # Flag argument
-        else:
-            # This handles the case where the first argument is the command itself
-            # and subsequent arguments are not prefixed with --
-            pass
-        i += 1
-    return parsed_args
+                return [], "help"
+        # Normal command
+        if len(parts) == 1:
+            return [c for c in self.get_commands() if c.startswith(parts[0])], "cmd"
+        cmd = parts[0]
+        args = self.get_command_args(cmd)
+        already = set()
+        for p in parts[1:]:
+            if p.startswith("--"):
+                already.add(p[2:])
+        return [f"--{a}" for a in args if a not in already], "arg"
 
-class CometApp(App):
-    CSS = """
-    Screen {
-        background: #1a0033; /* Dark purple/blue for space */
-    }
-    Header {
-        background: #4a0080; /* Slightly lighter purple */
-        color: #e0b0ff; /* Light purple text */
-        text-align: center;
-    }
-    Footer {
-        background: #4a0080;
-        color: #e0b0ff;
-    }
-    #output_log {
-        background: #0d001a; /* Even darker for log area */
-        color: #b0e0e6; /* Light blue/cyan for text */
-    }
-    #command_input {
-        background: #2a004d; /* Medium purple for input */
-        color: #ffffff;
-        border: solid #8a2be2;
-    }
-    Tree {
-        background: #0d001a;
-        color: #b0e0e6;
-    }
-    Tree > .tree-row--highlight {
-        background: #6a00b0;
-    }
-    Tree > .tree-row--highlight .tree-row--label {
-        text-style: bold;
-    }
-    .hidden {
-        display: none;
-    }
-    ListView {
-        border: solid #8a2be2;
-        background: #2a004d;
-        color: #ffffff;
-        height: 5; /* Explicit height for ListView */
-        dock: bottom;
-        overflow-y: auto; /* Enable vertical scrolling */
-    }
-    ListView > .list-item {
-        padding: 0 1; /* Add some padding to list items */
-        background: #3a005d; /* Explicit background for list items */
-        color: #ffffff; /* Explicit text color for list items */
-        height: 1; /* Explicit height for list items */
-        border: solid red; /* Add a red border for debugging */
-    }
-    ListView > .list-item--highlight {
-        background: #6a00b0;
-    }
-    ListView > .list-item--highlight .list-item__label {
-        text-style: bold;
-    }
-    ListView > .list-item .list-item__label {
-        color: #ffffff; /* Ensure label text is white */
-        display: block; /* Ensure label takes up block space */
-        width: 100%; /* Ensure label takes full width of list item */
-        border: solid blue; /* Add a blue border for debugging */
-    }
-    """
+    def parse(self, text):
+        # Returns (cmd, arg_dict) or (None, None)
+        parts = text.strip().split()
+        if not parts:
+            return None, None
+        cmd = parts[0]
+        if cmd not in self.commands:
+            return None, None
+        args = {}
+        i = 1
+        while i < len(parts):
+            if parts[i].startswith("--") and i+1 < len(parts):
+                args[parts[i][2:]] = parts[i+1]
+                i += 2
+            else:
+                i += 1
+        return cmd, args
 
+parser = CommandParser(API_METHODS, CATEGORIES)
+
+class HelpPanel(Static):
+    def update_help(self, tokens):
+        # tokens: list of words after 'help'
+        if not tokens:
+            # Show all categories
+            cats = parser.get_categories()
+            self.update("[b]Categories:[/b]\n" + "\n".join(cats))
+            return
+        if tokens[0] in parser.get_categories():
+            # Show all commands in category
+            cmds = parser.get_commands(tokens[0])
+            out = f"[b]{tokens[0]} Commands:[/b]\n" + "\n".join(cmds)
+            self.update(out)
+            return
+        if tokens[0] in parser.get_commands():
+            # Show command info
+            info = parser.get_command_info(tokens[0])
+            out = f"[b]{tokens[0]}[/b]: {info.get('description','')}\n"
+            out += f"[b]Category:[/b] {info.get('category','')}\n"
+            params = info.get('parameters',{})
+            if params:
+                out += "[b]Arguments:[/b]\n"
+                for k,v in params.items():
+                    out += f"  --{k} ({v['type']}) {'[required]' if v.get('required') else '[optional]'}\n"
+            out += f"[b]Example:[/b] {info.get('example','')}\n"
+            self.update(out)
+            return
+        # help <command> <arg> ...
+        self.update("[i]No further help available.[/i]")
+
+class CommandInput(Input):
+    class Complete(Message):
+        def __init__(self, suggestions):
+            self.suggestions = suggestions
+            super().__init__()
+
+import asyncio
+from textual.widget import Widget
+
+class BannerWidget(Static):
+    MOON = "🌙"
+    NUM_MOONS = 3
+    DELAY = 0.1
+    def __init__(self, *args, **kwargs):
+        super().__init__("", *args, **kwargs)
+        self.banner_offset = 0
+        self.running = False
+        self.visible = False
+
+    async def start_animation(self):
+        if self.running:
+            return
+        self.running = True
+        self._banner_task = asyncio.create_task(self.animate())
+
+    async def stop_animation(self):
+        self.running = False
+        if hasattr(self, '_banner_task') and self._banner_task:
+            self._banner_task.cancel()
+            self._banner_task = None
+
+    async def animate(self):
+        prev_width = None
+        self.banner_offset = 0
+        while self.running:
+            width = self.app.size.width if self.app else 80
+            if prev_width is not None and width != prev_width:
+                self.banner_offset = 0  # Reset animation on resize
+            prev_width = width
+            spacing = width // (self.NUM_MOONS + 1)
+            total_travel = width + (self.NUM_MOONS - 1) * spacing
+            line = [" "] * width
+            for i in range(self.NUM_MOONS):
+                pos = width - 1 + i * spacing - self.banner_offset
+                if 0 <= pos < width:
+                    line[pos] = self.MOON
+            self.update("".join(line))
+            self.banner_offset += 1
+            if self.banner_offset > total_travel:
+                self.banner_offset = 0
+            await asyncio.sleep(self.DELAY)
+
+class TUIApp(App):
+    CSS_PATH = None
     BINDINGS = [
-        ("d", "toggle_dark", "Toggle dark mode"),
-        ("q", "quit", "Quit"),
-        ("c", "clear", "Clear output"),
-        ("tab", "tab", "Complete"),
+        ("ctrl+c", "quit", "Quit"),
+        ("enter", "submit", "Submit")
     ]
 
-    api_key = reactive(None)
-    suggestion_list: ListView | None = None
-    suggestions = reactive([])
-
     def compose(self) -> ComposeResult:
-        yield Header(show_clock=True, name="☄️ Comet CLI ☄️")
-        with Container() as container:
-            self.output_log = RichLog(id="output_log", auto_scroll=True)
-            self.api_response_tree = JsonTree("api_response_tree", {}, id="api_response_tree", show_root=False)
-            self.command_input = Input(placeholder="Enter command here...", id="command_input")
-            self.suggestion_list = ListView(id="suggestion_list")
-            yield self.output_log
-            yield self.api_response_tree
-            yield self.command_input
-            yield self.suggestion_list
-        yield Footer(name="🚀 Ready for launch! 🚀")
+        yield Header()
+        with Vertical():
+            yield HelpPanel(id="help_panel")
+            yield Log(id="output", highlight=True)
+            yield CommandInput(placeholder="Type a command...", id="cmd_input")
+            yield Static(id="suggestion_row")
+            yield BannerWidget(id="banner")
+        yield Footer()
 
-    def on_mount(self) -> None:
-        self.call_after_refresh(self._post_mount_setup)
+    async def on_mount(self):
+        self.query_one("#help_panel", HelpPanel).update_help([])
+        self.suggestions = []
+        self.suggestion_index = 0
+        self.query_one("#cmd_input", CommandInput).focus()
 
-    def _post_mount_setup(self) -> None:
-        self.command_input = self.query_one("#command_input")
-        self.output_log = self.query_one("#output_log")
-        self.api_response_tree = self.query_one("#api_response_tree")
-        self.suggestion_list = self.query_one("#suggestion_list")
-
-        self.command_input.focus()
-        self.load_api_key()
-
-    def load_api_key(self) -> None:
-        global API_KEY
-        config = load_config()
-        api_key_path = config.get("api_key_path")
-
-        if not api_key_path or not os.path.exists(api_key_path):
-            self.output_log.write("Welcome to comet-cli! It looks like this is your first time running it or your key.txt path is missing/invalid.")
-            self.output_log.write("Please provide the absolute path to your key.txt file:")
-            self.command_input.placeholder = "Path to key.txt"
-        else:
-            try:
-                with open(api_key_path, 'r') as f:
-                    API_KEY = f.read().strip()
-                if not API_KEY:
-                    self.output_log.write("Warning: key.txt file is empty. Please ensure your API key is in the file.")
-                else:
-                    self.api_key = API_KEY # Update reactive variable
-                    self.output_log.write("API key loaded. Type 'help' for available commands.")
-                    self.command_input.placeholder = "Enter command here..."
-            except Exception as e:
-                self.output_log.write(f"Error reading key.txt: {e}")
-                self.output_log.write("Please ensure the file exists and you have read permissions. You may need to delete ~/.comet/config.json and restart.")
-                self.app.exit()
-
-    def on_input_changed(self, event: Input.Changed) -> None:
-        text = event.value.strip().lower()
-        if text:
-            self.suggestions = [cmd for cmd in API_METHODS.keys() if cmd.lower().startswith(text)]
-        else:
-            self.suggestions = []
-
-    def watch_suggestions(self, suggestions: list[str]) -> None:
-        self.suggestion_list.clear()
-        if suggestions:
-            self.suggestion_list.extend([ListItem(Label(cmd)) for cmd in suggestions])
-            self.suggestion_list.display = True
-        else:
-            self.suggestion_list.display = False
-
-    def on_list_view_selected(self, event: ListView.Selected) -> None:
-        if event.list_view.id == "suggestion_list":
-            self.command_input.value = event.item.children[0].renderable.plain
-            self.suggestion_list.display = False
-            self.command_input.focus()
-
-    def on_input_submitted(self, message: Input.Submitted) -> None:
-        if message.input.id == "command_input":
-            text = message.value.strip()
-            self.query_one("#command_input").value = ""
-            self.suggestion_list.display = False # Hide suggestions on submission
-            
-            # Always show the RichLog and hide the JsonTree when a new command is entered
-            self.query_one("#output_log").display = True
-            self.query_one("#api_response_tree").display = False
-
-            if not text:
-                return
-
-            if self.api_key is None: # Still in key setup phase
-                key_path_input = text
-                if os.path.exists(key_path_input) and os.path.isfile(key_path_input):
-                    config = load_config()
-                    config["api_key_path"] = key_path_input
-                    save_config(config)
-                    self.query_one("#output_log").write(f"Key file path saved: {key_path_input}")
-                    self.load_api_key() # Reload to load the API key
-                else:
-                    self.query_one("#output_log").write("Invalid path or file does not exist. Please try again.")
-            else: # Regular command submission
-                self.output_log.write(f"comet> {text}")
-                parts = text.split()
-                command = parts[0]
-                args = parts[1:]
-                self.execute_command(command, args)
-
-    def action_toggle_dark(self) -> None:
-        self.dark = not self.dark
-
-    def action_quit(self) -> None:
-        self.app.exit()
-
-    def action_clear(self) -> None:
-        self.output_log.clear()
-        self.api_response_tree.clear()
-        self.api_response_tree.display = False
-        self.output_log.display = True
-
-    def execute_command(self, command, args):
-        global API_KEY
-
-        output_log = self.query_one("#output_log")
-        
-
-        if command == "exit":
-            output_log.write("Exiting comet-cli.")
-            self.app.exit()
-        elif command == "help":
-            if args:
-                arg = args[0]
-                if arg in API_METHODS:
-                    method_info = API_METHODS[arg]
-                    output_log.write(f"Command: {arg}")
-                    output_log.write(f"  Description: {method_info['description']}")
-                    output_log.write(f"  Category: {method_info['category']}")
-                    output_log.write("  Parameters:")
-                    for param, info in method_info["parameters"].items():
-                        req = " (Required)" if info["required"] else ""
-                        post = " (POST data)" if info.get("post") else ""
-                        output_log.write(f"    --{param} ({info['type']}){req}{post}")
-                    if "example" in method_info:
-                        output_log.write(f"  Example: {method_info['example']}")
-                elif arg.capitalize() in CATEGORIES: # Check if it's a category
-                    category_name = arg.capitalize()
-                    output_log.write(f"Commands in category '{category_name}':")
-                    for cmd in CATEGORIES[category_name]:
-                        output_log.write(f"  {cmd}: {API_METHODS[cmd]['description']}")
-                else:
-                    output_log.write(f"Unknown command or category: {arg}")
-            else:
-                output_log.write("Available categories:")
-                for category in CATEGORIES.keys():
-                    output_log.write(f"  - {category}")
-                output_log.write("")
-                output_log.write("Type 'help <command>' for more details on a command.")
-                output_log.write("Type 'help <category>' to list commands in a category.")
-                output_log.write("Type 'list categories' to see all categories.")
-                output_log.write("Type 'q' to quit.")
-        elif command == "list":
-            if args and args[0] == "categories":
-                output_log.write("Available categories:")
-                for category in CATEGORIES.keys():
-                    output_log.write(f"  - {category}")
-            else:
-                output_log.write("Usage: list categories")
-        elif command == "search":
-            if args:
-                keyword = args[0].lower()
-                found_commands = []
-                found_categories = []
-                for cmd, info in API_METHODS.items():
-                    if keyword in cmd.lower() or keyword in info["description"].lower():
-                        found_commands.append(cmd)
-                for category, commands in CATEGORIES.items():
-                    if keyword in category.lower():
-                        found_categories.append(category)
-                
-                if found_commands:
-                    output_log.write(f"Commands matching '{keyword}':")
-                    for cmd in found_commands:
-                        output_log.write(f"  {cmd}: {API_METHODS[cmd]['description']}")
-                if found_categories:
-                    output_log.write(f"Categories matching '{keyword}':")
-                    for category in found_categories:
-                        output_log.write(f"  - {category}")
-                if not found_commands and not found_categories:
-                    output_log.write(f"No commands or categories found matching '{keyword}'.")
-            else:
-                output_log.write("Usage: search <keyword>")
-        elif command in API_METHODS:
-            if not API_KEY:
-                output_log.write("API key not loaded. Please restart the CLI to go through the setup process.")
-                return
-
-            method_info = API_METHODS[command]
-            params = parse_arguments(args)
-            
-            # Prepare request parameters
-            request_params = {"cmd": command}
-            if API_KEY:
-                request_params["key"] = API_KEY
-
-            post_data = {}
-
-            for param_name, param_info in method_info["parameters"].items():
-                if param_info.get("required") and param_name not in params:
-                    output_log.write(f"Error: Missing required parameter --{param_name} for command {command}")
+    async def on_key(self, event):
+        focused = self.focused
+        if event.key == "tab":
+            event.stop()
+            if isinstance(focused, CommandInput):
+                ghost = self.query_one("#ghost_text", Static)
+                if ghost.renderable and getattr(self, 'suggestions', []):
+                    await self.action_autocomplete()
+            # Always do nothing else for Tab (never move focus)
+            return
+        elif event.key == "enter":
+            if isinstance(focused, CommandInput):
+                txt = focused.value.strip()
+                cmd, args = parser.parse(txt)
+                suggestion_row = self.query_one("#suggestion_row", Static)
+                if not cmd or (cmd and any(
+                    p.startswith('--') and p[2:] not in parser.get_command_args(cmd)
+                    for p in txt.split()[1:])):
+                    # Malformed: trigger autocomplete instead of submit
+                    event.stop()
+                    if suggestion_row.visible and getattr(self, 'suggestions', []):
+                        await self.action_autocomplete()
                     return
-                
-                if param_name in params:
-                    value = params[param_name]
-                    # Type conversion
-                    if param_info["type"] == "int":
-                        try:
-                            value = int(value)
-                        except ValueError:
-                            output_log.write(f"Error: Parameter --{param_name} expects an integer.")
-                            return
-                    elif param_info["type"] == "bool":
-                        value = str(value).lower() in ("true", "1", "yes")
-                    elif param_info["type"] == "list":
-                        try:
-                            value = eval(value) # Dangerous, but for simplicity in CLI for now
-                            if not isinstance(value, list):
-                                raise ValueError
-                        except (SyntaxError, ValueError):
-                            output_log.write(f"Error: Parameter --{param_name} expects a list (e.g., [1,2,3]).")
-                            return
+                # else, allow normal submit
+            # fall through to default
+        elif event.key == "down":
 
-                    if param_info.get("post"):
-                        post_data[param_name] = value
-                    else:
-                        request_params[param_name] = value
-            
-            # Add beautify parameter if requested
-            if "beautify" in params and params["beautify"] is True:
-                request_params["beautify"] = True
-
-            try:
-                if post_data:
-                    response = requests.post(BASE_URL, params=request_params, data=post_data)
-                else:
-                    response = requests.get(BASE_URL, params=request_params)
-                
-                response.raise_for_status() # Raise an exception for HTTP errors
-                
-                try:
-                    json_response = response.json()
-                    # Now we will display this in a Textual TreeView
-                    output_log.display = False
-                    self.api_response_tree.data = json_response
-                    self.api_response_tree.clear()
-                    self.api_response_tree.add_json_data(self.api_response_tree.root, json_response)
-                    self.api_response_tree.display = True
-                    self.api_response_tree.focus()
-
-                except requests.exceptions.JSONDecodeError:
-                    output_log.write("Raw response (not JSON):")
-                    output_log.write(response.text)
-
-            except requests.exceptions.RequestException as e:
-                output_log.write(f"API request failed: {e}")
+            if isinstance(focused, CommandInput):
+                event.stop()
+                await self.action_move_suggestion_down()
+            else:
+                return
+        elif event.key == "up":
+            if isinstance(focused, CommandInput):
+                event.stop()
+                await self.action_move_suggestion_up()
+            else:
+                return
         else:
-            output_log.write(f"Unknown command: {command}. Type 'help' for a list of commands.")
+            return
+
+    async def on_input_changed(self, event: Input.Changed):
+        txt = event.value
+        suggestion_row = self.query_one("#suggestion_row", Static)
+        banner = self.query_one("#banner", BannerWidget)
+        if not txt.strip():
+            suggestion_row.visible = False
+            banner.visible = True
+            await banner.start_animation()
+            self.suggestions = []
+        else:
+            banner.visible = False
+            await banner.stop_animation()
+            sugg, ctx = parser.complete(txt)
+            self.suggestions = sugg
+            if sugg:
+                best = sugg[:5]  # Show up to 5 best matches
+                row = []
+                for i, s in enumerate(best):
+                    if i == getattr(self, "suggestion_index", 0):
+                        row.append(f"[reverse]{s}[/reverse]")
+                    else:
+                        row.append(s)
+                suggestion_row.update("  ".join(row))
+                suggestion_row.visible = True
+            else:
+                suggestion_row.visible = False
+
+    async def on_input_submitted(self, event: Input.Submitted):
+        txt = event.value.strip()
+        output = self.query_one("#output", Log)
+        if txt.startswith("help"):
+            tokens = txt.split()[1:]
+            self.query_one("#help_panel", HelpPanel).update_help(tokens)
+            return
+        cmd, args = parser.parse(txt)
+        if not cmd:
+            output.write("[red]Unknown command. Type 'help' for a list.[/red]")
+            return
+        # Simulate API call (replace with real logic as needed)
+        resp = {"command": cmd, "args": args, "result": f"Simulated response for {cmd}"}
+        pretty = pretty_repr(resp)
+        # Log.write expects a string, not a Syntax object
+        output.write(json.dumps(resp, indent=2))
+
+    async def action_autocomplete(self):
+        suggestion_row = self.query_one("#suggestion_row", Static)
+        if self.suggestions:
+            selected = self.suggestions[self.suggestion_index] if self.suggestion_index < len(self.suggestions) else self.suggestions[0]
+            input_widget = self.query_one("#cmd_input", CommandInput)
+            # Replace current word or append
+            txt = input_widget.value
+            parts = txt.strip().split()
+            if not parts:
+                input_widget.value = selected + " "
+            else:
+                # Replace last word
+                if txt.endswith(" "):
+                    input_widget.value += selected + " "
+                else:
+                    parts[-1] = selected
+                    input_widget.value = " ".join(parts) + " "
+            await self.on_input_changed(Input.Changed(input_widget, input_widget.value))
+            input_widget.cursor_position = len(input_widget.value)
+            suggestion_row.visible = False
+
+    async def action_move_suggestion_down(self):
+        suggestion_row = self.query_one("#suggestion_row", Static)
+        if self.suggestions:
+            self.suggestion_index = (self.suggestion_index + 1) % len(self.suggestions)
+            await self.on_input_changed(Input.Changed(self.query_one("#cmd_input", CommandInput), self.query_one("#cmd_input", CommandInput).value))
+
+    async def action_move_suggestion_up(self):
+        suggestion_row = self.query_one("#suggestion_row", Static)
+        if self.suggestions:
+            self.suggestion_index = (self.suggestion_index - 1) % len(self.suggestions)
+            await self.on_input_changed(Input.Changed(self.query_one("#cmd_input", CommandInput), self.query_one("#cmd_input", CommandInput).value))
 
 if __name__ == "__main__":
-    # Dynamically add --beautify to all API methods for help and completion
-    for method_name in API_METHODS:
-        API_METHODS[method_name]["parameters"]["beautify"] = {"type": "bool", "required": False}
-
-    app = CometApp()
-    app.run()
+    TUIApp().run()
