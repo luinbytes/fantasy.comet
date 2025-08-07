@@ -129,48 +129,96 @@ class CommandInput(Input):
 import asyncio
 from textual.widget import Widget
 
-class BannerWidget(Static):
-    MOON = "🌙"
-    NUM_MOONS = 3
-    DELAY = 0.1
+class ForumPostsWidget(Static):
     def __init__(self, *args, **kwargs):
-        super().__init__("", *args, **kwargs)
-        self.banner_offset = 0
+        super().__init__("Loading forum posts...", *args, **kwargs)
+        self.posts = []
+        self.loading = False
+        self.scroll_pos = 0
         self.running = False
-        self.visible = False
+        self.posts_text = ""
+        self.animation_delay = 0.15
 
+    async def fetch_forum_posts(self):
+        """Fetch the 5 most recent forum posts from the API"""
+        if self.loading:
+            return
+        
+        self.loading = True
+        try:
+            # Simulate forum post titles
+            self.posts = [
+                "Welcome to Fantasy CLI - Getting Started Guide",
+                "Feature Update: New autocomplete system released", 
+                "Community Scripts: Share your automation tools",
+                "Bug Fix: Terminal rendering improvements in v2.1",
+                "Announcement: Server maintenance scheduled"
+            ]
+            
+            # Create scrolling text with separators
+            self.posts_text = " | ".join(self.posts) + " | "
+            
+        except Exception as e:
+            self.posts_text = f"Error: {str(e)}"
+        finally:
+            self.loading = False
+
+    async def start_updates(self):
+        """Start periodic updates and animation of forum posts"""
+        await self.fetch_forum_posts()
+        await self.start_animation()
+        # Refresh posts every 5 minutes
+        asyncio.create_task(self.periodic_update())
+    
     async def start_animation(self):
+        """Start the scrolling animation"""
         if self.running:
             return
         self.running = True
-        self._banner_task = asyncio.create_task(self.animate())
-
+        asyncio.create_task(self.animate())
+    
     async def stop_animation(self):
+        """Stop the scrolling animation"""
         self.running = False
-        if hasattr(self, '_banner_task') and self._banner_task:
-            self._banner_task.cancel()
-            self._banner_task = None
-
+    
     async def animate(self):
-        prev_width = None
-        self.banner_offset = 0
+        """Animate the scrolling forum posts"""
+        self.scroll_pos = 0
+        
         while self.running:
-            width = self.app.size.width if self.app else 80
-            if prev_width is not None and width != prev_width:
-                self.banner_offset = 0  # Reset animation on resize
-            prev_width = width
-            spacing = width // (self.NUM_MOONS + 1)
-            total_travel = width + (self.NUM_MOONS - 1) * spacing
-            line = [" "] * width
-            for i in range(self.NUM_MOONS):
-                pos = width - 1 + i * spacing - self.banner_offset
-                if 0 <= pos < width:
-                    line[pos] = self.MOON
-            self.update("".join(line))
-            self.banner_offset += 1
-            if self.banner_offset > total_travel:
-                self.banner_offset = 0
-            await asyncio.sleep(self.DELAY)
+            try:
+                width = self.app.size.width if self.app else 80
+                
+                if not self.posts_text:
+                    await asyncio.sleep(self.animation_delay)
+                    continue
+                    
+                # Create the display line
+                text_len = len(self.posts_text)
+                
+                if text_len <= width:
+                    # If text fits on screen, just display it
+                    line = self.posts_text.ljust(width)
+                else:
+                    # Scroll the text
+                    line = ""
+                    for i in range(width):
+                        char_pos = (i + self.scroll_pos) % text_len
+                        line += self.posts_text[char_pos]
+                
+                self.update(f"[dim]Latest:[/dim] {line}")
+                await asyncio.sleep(self.animation_delay)
+                self.scroll_pos = (self.scroll_pos + 1) % text_len
+                
+            except Exception as e:
+                self.update(f"[red]Animation error: {str(e)}[/red]")
+                await asyncio.sleep(1)
+    
+    async def periodic_update(self):
+        """Periodically update forum posts"""
+        while True:
+            await asyncio.sleep(300)  # 5 minutes
+            await self.fetch_forum_posts()
 
 class TUIApp(App):
     CSS_PATH = None
@@ -186,7 +234,7 @@ class TUIApp(App):
             yield Log(id="output", highlight=True)
             yield CommandInput(placeholder="Type a command...", id="cmd_input")
             yield Static(id="suggestion_row")
-            yield BannerWidget(id="banner")
+            yield ForumPostsWidget(id="forum_posts")
         yield Footer()
 
     async def on_mount(self):
@@ -194,6 +242,8 @@ class TUIApp(App):
         self.suggestions = []
         self.suggestion_index = 0
         self.query_one("#cmd_input", CommandInput).focus()
+        forum_posts = self.query_one("#forum_posts", ForumPostsWidget)
+        await forum_posts.start_updates()
 
     async def on_key(self, event):
         focused = self.focused
@@ -242,15 +292,13 @@ class TUIApp(App):
     async def on_input_changed(self, event: Input.Changed):
         txt = event.value
         suggestion_row = self.query_one("#suggestion_row", Static)
-        banner = self.query_one("#banner", BannerWidget)
+        forum_posts = self.query_one("#forum_posts", ForumPostsWidget)
         if not txt.strip():
             suggestion_row.visible = False
-            banner.visible = True
-            await banner.start_animation()
+            forum_posts.visible = True
             self.suggestions = []
         else:
-            banner.visible = False
-            await banner.stop_animation()
+            forum_posts.visible = True  # Keep forum posts visible
             # Track last input to decide if we should reset selection
             prev_txt = getattr(self, "_last_input_text", None)
             self._last_input_text = txt
