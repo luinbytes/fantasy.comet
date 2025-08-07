@@ -187,31 +187,37 @@ class ForumPostsWidget(Static):
         
         while self.running:
             try:
-                width = self.app.size.width if self.app else 80
+                # Get terminal width and account for the prefix text
+                terminal_width = self.app.size.width if self.app else 80
+                prefix = "Latest: "  # Plain text version of the prefix
+                available_width = max(10, terminal_width - len(prefix) - 2)  # Reserve space for prefix and margin
                 
                 if not self.posts_text:
                     await asyncio.sleep(self.animation_delay)
                     continue
                     
-                # Create the display line
+                # Create the display line that fits exactly in available width
                 text_len = len(self.posts_text)
                 
-                if text_len <= width:
-                    # If text fits on screen, just display it
-                    line = self.posts_text.ljust(width)
+                if text_len <= available_width:
+                    # If text fits in available space, just display it
+                    line = self.posts_text.ljust(available_width)[:available_width]
                 else:
-                    # Scroll the text
+                    # Scroll the text within the available width
                     line = ""
-                    for i in range(width):
+                    for i in range(available_width):
                         char_pos = (i + self.scroll_pos) % text_len
                         line += self.posts_text[char_pos]
+                
+                # Ensure line is exactly the right length
+                line = line[:available_width].ljust(available_width)
                 
                 self.update(f"[dim]Latest:[/dim] {line}")
                 await asyncio.sleep(self.animation_delay)
                 self.scroll_pos = (self.scroll_pos + 1) % text_len
                 
             except Exception as e:
-                self.update(f"[red]Animation error: {str(e)}[/red]")
+                self.update(f"[red]Error: {str(e)}[/red]")
                 await asyncio.sleep(1)
     
     async def periodic_update(self):
