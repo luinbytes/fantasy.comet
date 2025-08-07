@@ -199,10 +199,13 @@ class TUIApp(App):
         focused = self.focused
         if event.key == "tab":
             event.stop()
+            event.prevent_default()
             if isinstance(focused, CommandInput):
-                ghost = self.query_one("#ghost_text", Static)
-                if ghost.renderable and getattr(self, 'suggestions', []):
+                # Accept the current suggestion if available
+                if getattr(self, 'suggestions', []):
                     await self.action_autocomplete()
+                # Manually ensure cursor is at end without refocusing
+                focused.cursor_position = len(focused.value)
             # Always do nothing else for Tab (never move focus)
             return
         elif event.key == "enter":
@@ -248,20 +251,39 @@ class TUIApp(App):
         else:
             banner.visible = False
             await banner.stop_animation()
+            # Track last input to decide if we should reset selection
+            prev_txt = getattr(self, "_last_input_text", None)
+            self._last_input_text = txt
+
             sugg, ctx = parser.complete(txt)
             self.suggestions = sugg
+
+            # Reset selection only when the user actually changes text (not when we refresh UI)
+            if not getattr(self, "_suppress_index_reset", False) and txt != prev_txt:
+                self.suggestion_index = 0
+
             if sugg:
-                best = sugg[:5]  # Show up to 5 best matches
+                # Window the suggestions around the current index so the highlight is always visible
+                window = 5
+                total = len(sugg)
+                start = max(0, min(max(0, getattr(self, "suggestion_index", 0)) - 2, max(0, total - window)))
+                end = start + window
+                best = sugg[start:end]
                 row = []
                 for i, s in enumerate(best):
-                    if i == getattr(self, "suggestion_index", 0):
+                    if (start + i) == getattr(self, "suggestion_index", 0):
                         row.append(f"[reverse]{s}[/reverse]")
                     else:
                         row.append(s)
-                suggestion_row.update("  ".join(row))
+                # Include a subtle context hint
+                hint = f"[dim]{ctx}[/dim]  " if ctx else ""
+                suggestion_row.update(hint + "  ".join(row))
                 suggestion_row.visible = True
             else:
                 suggestion_row.visible = False
+
+            # Always clear the suppression flag after a refresh
+            self._suppress_index_reset = False
 
     async def on_input_submitted(self, event: Input.Submitted):
         txt = event.value.strip()
@@ -305,13 +327,19 @@ class TUIApp(App):
         suggestion_row = self.query_one("#suggestion_row", Static)
         if self.suggestions:
             self.suggestion_index = (self.suggestion_index + 1) % len(self.suggestions)
-            await self.on_input_changed(Input.Changed(self.query_one("#cmd_input", CommandInput), self.query_one("#cmd_input", CommandInput).value))
+            # Re-render without resetting the index
+            self._suppress_index_reset = True
+            input_w = self.query_one("#cmd_input", CommandInput)
+            await self.on_input_changed(Input.Changed(input_w, input_w.value))
 
     async def action_move_suggestion_up(self):
         suggestion_row = self.query_one("#suggestion_row", Static)
         if self.suggestions:
             self.suggestion_index = (self.suggestion_index - 1) % len(self.suggestions)
-            await self.on_input_changed(Input.Changed(self.query_one("#cmd_input", CommandInput), self.query_one("#cmd_input", CommandInput).value))
+            # Re-render without resetting the index
+            self._suppress_index_reset = True
+            input_w = self.query_one("#cmd_input", CommandInput)
+            await self.on_input_changed(Input.Changed(input_w, input_w.value))
 
 if __name__ == "__main__":
     TUIApp().run()
