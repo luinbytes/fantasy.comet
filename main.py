@@ -138,33 +138,12 @@ parser = CommandParser(API_METHODS, CATEGORIES)
 
 class HelpPanel(Static):
     def update_help(self, tokens):
-        # tokens: list of words after 'help'
+        # Clear the help panel when no tokens are provided
         if not tokens:
-            # Show all categories
-            cats = parser.get_categories()
-            self.update("[b]Categories:[/b]\n" + "\n".join(cats))
+            self.update("")
             return
-        if tokens[0] in parser.get_categories():
-            # Show all commands in category
-            cmds = parser.get_commands(tokens[0])
-            out = f"[b]{tokens[0]} Commands:[/b]\n" + "\n".join(cmds)
-            self.update(out)
-            return
-        if tokens[0] in parser.get_commands():
-            # Show command info
-            info = parser.get_command_info(tokens[0])
-            out = f"[b]{tokens[0]}[/b]: {info.get('description','')}\n"
-            out += f"[b]Category:[/b] {info.get('category','')}\n"
-            params = info.get('parameters',{})
-            if params:
-                out += "[b]Arguments:[/b]\n"
-                for k,v in params.items():
-                    out += f"  --{k} ({v['type']}) {'[required]' if v.get('required') else '[optional]'}\n"
-            out += f"[b]Example:[/b] {info.get('example','')}\n"
-            self.update(out)
-            return
-        # help <command> <arg> ...
-        self.update("[i]No further help available.[/i]")
+        # For any other help requests, show minimal information
+        self.update("")
 
 class CommandInput(Input):
     class Complete(Message):
