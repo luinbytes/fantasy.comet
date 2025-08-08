@@ -2,7 +2,18 @@
 
 A Textual-based Terminal User Interface (TUI) application for interacting with the Constelia.ai API.
 
-[![Discord](https://img.shields.io/discord/your-discord-server-id?color=7289da&label=Discord&logo=discord&logoColor=white)](https://discord.gg/V4w2zVZJ3g)
+[![Discord](https://img.shields.io/discord/1280919597180260475?color=7289da&label=Discord&logo=discord&logoColor=white)](https://discord.gg/V4w2zVZJ3g)
+
+## Features
+
+- **TUI Interface**: Modern terminal-based user interface built with Textual
+- **API Integration**: Direct integration with Constelia.ai API
+- **Collapsible JSON Display**: Interactive tree view for complex JSON responses
+- **Syntax Highlighting**: Color-coded output for better readability
+- **Command Auto-completion**: Suggestions for commands as you type
+- **Real-time Forum Posts**: Live display of community forum updates
+- **Custom Response Handling**: Specialized display for specific API endpoints like getBuilds
+- **Keyboard Navigation**: Full keyboard support for all interface elements
 
 ## Prerequisites
 
@@ -12,13 +23,7 @@ A Textual-based Terminal User Interface (TUI) application for interacting with t
 
 ## What is this tool for?
 
-Fantasy.Comet is a command-line interface that allows users to interact with the Constelia.ai API directly from the terminal. It provides a user-friendly TUI with features like:
-
-- Collapsible JSON response display for complex API responses
-- Syntax highlighting for better readability
-- Auto-completion for commands
-- Real-time forum posts display
-- Custom handling for specific API endpoints like getBuilds
+Fantasy.Comet is a command-line interface that allows users to interact with the Constelia.ai API directly from the terminal. It provides a user-friendly TUI with advanced features for viewing and navigating JSON responses from the API.
 
 **Note: Without a valid Constelia.ai API key, this tool is useless as it cannot make any API calls.**
 
