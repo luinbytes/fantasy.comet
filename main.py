@@ -402,7 +402,13 @@ class TUIApp(App):
             tree_output = self.query_one("#tree_output", Tree)
             # Clear and populate the tree
             tree_output.clear()
-            self._build_tree(resp, tree_output.root)
+            
+            # Special handling for getBuilds command
+            if cmd == "getBuilds" and isinstance(resp, list):
+                self._build_builds_tree(resp, tree_output.root)
+            else:
+                self._build_tree(resp, tree_output.root)
+            
             tree_output.root.expand()
             # Show tree output and hide regular output
             tree_output.display = True
@@ -482,6 +488,31 @@ class TUIApp(App):
             return f"[green]{json.dumps(value)}[/green]"
         else:
             return f"[white]{json.dumps(value)}[/white]"
+
+    def _build_builds_tree(self, data: list, node: TreeNode):
+        """Build a tree for getBuilds response, sorted by popularity and labeled by author."""
+        # Sort builds by popularity (descending)
+        sorted_builds = sorted(data, key=lambda x: x.get('popularity', 0), reverse=True)
+        
+        for build in sorted_builds:
+            # Use author name and popularity as label
+            author = build.get('author', 'Unknown Author')
+            popularity = build.get('popularity', 0)
+            label = f"{author} (Popularity: {popularity})"
+            
+            # Create a branch for each build
+            branch = node.add(label, expand=False, allow_expand=True)
+            
+            # Add build details
+            for key, value in build.items():
+                if isinstance(value, (dict, list)) and value:
+                    # Create sub-branches for complex nested structures
+                    sub_branch = branch.add(key, expand=False, allow_expand=True)
+                    self._build_tree(value, sub_branch, key)
+                else:
+                    # Display simple key-value pairs directly
+                    formatted_value = self._format_simple_value(value)
+                    branch.add(f"{key}: {formatted_value}", allow_expand=False)
 
     async def action_move_suggestion_down(self):
         suggestion_row = self.query_one("#suggestion_row", Static)
