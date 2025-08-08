@@ -127,3 +127,4 @@ Desktop.ini
 .env
 .env.*
 *.log
+.windsurf/rules/api-docs.md

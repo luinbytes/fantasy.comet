@@ -2,15 +2,61 @@ import sys
 import asyncio
 import importlib
 import json
+import requests
 from rich.pretty import pretty_repr
 from rich.syntax import Syntax
 from textual.app import App, ComposeResult
-from textual.widgets import Input, Static, Header, Footer, Log
+from textual.widgets import Input, Static, Header, Footer, Log, RichLog
 from textual.containers import Vertical
 from textual.reactive import reactive
 from textual.message import Message
 
+# Import config utilities
+import config_utils
+
 # Dynamically import API_METHODS and CATEGORIES
+
+def make_api_call(cmd, args, api_key):
+    """Make an actual API call to constelia.ai using the provided command and arguments."""
+    # Base API URL
+    base_url = "https://constelia.ai/api.php"
+    
+    # Prepare parameters
+    params = {"key": api_key, "cmd": cmd}
+    
+    # Add additional arguments as parameters
+    post_data = {}
+    for arg_name, arg_value in args.items():
+        # Check if the argument should be sent as POST data
+        if cmd in API_METHODS and arg_name in API_METHODS[cmd].get("parameters", {}):
+            if API_METHODS[cmd]["parameters"][arg_name].get("post", False):
+                post_data[arg_name] = arg_value
+            else:
+                params[arg_name] = arg_value
+        else:
+            # For flags (boolean arguments without values)
+            if arg_value is None:
+                params[arg_name] = ""
+            else:
+                params[arg_name] = arg_value
+    
+    # Make the API call
+    if post_data:
+        # POST request
+        response = requests.post(base_url, params=params, data=post_data)
+    else:
+        # GET request
+        response = requests.get(base_url, params=params)
+    
+    # Raise an exception for bad status codes
+    response.raise_for_status()
+    
+    # Try to parse JSON response
+    try:
+        return response.json()
+    except json.JSONDecodeError:
+        # Return text if not JSON
+        return {"response": response.text}
 api_mod = importlib.import_module("api_methods")
 API_METHODS = api_mod.API_METHODS
 CATEGORIES = api_mod.CATEGORIES
@@ -237,7 +283,7 @@ class TUIApp(App):
         yield Header()
         with Vertical():
             yield HelpPanel(id="help_panel")
-            yield Log(id="output", highlight=True)
+            yield RichLog(id="output", highlight=True, markup=True)
             yield CommandInput(placeholder="Type a command...", id="cmd_input")
             yield Static(id="suggestion_row")
             yield ForumPostsWidget(id="forum_posts")
@@ -341,7 +387,7 @@ class TUIApp(App):
 
     async def on_input_submitted(self, event: Input.Submitted):
         txt = event.value.strip()
-        output = self.query_one("#output", Log)
+        output = self.query_one("#output", RichLog)
         if txt.startswith("help"):
             tokens = txt.split()[1:]
             self.query_one("#help_panel", HelpPanel).update_help(tokens)
@@ -350,11 +396,18 @@ class TUIApp(App):
         if not cmd:
             output.write("[red]Unknown command. Type 'help' for a list.[/red]")
             return
-        # Simulate API call (replace with real logic as needed)
-        resp = {"command": cmd, "args": args, "result": f"Simulated response for {cmd}"}
-        pretty = pretty_repr(resp)
-        # Log.write expects a string, not a Syntax object
-        output.write(json.dumps(resp, indent=2))
+        # Get API key
+        api_key = config_utils.get_api_key()
+        if not api_key:
+            output.write("[red]Error: Could not load API key. Check your configuration.[/red]")
+            return
+        
+        # Make actual API call
+        try:
+            resp = make_api_call(cmd, args, api_key)
+            output.write(json.dumps(resp, indent=2))
+        except Exception as e:
+            output.write(f"[red]Error making API call: {str(e)}[/red]")
 
     async def action_autocomplete(self):
         suggestion_row = self.query_one("#suggestion_row", Static)
