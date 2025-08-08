@@ -2,6 +2,8 @@
 
 A Textual-based Terminal User Interface (TUI) application for interacting with the Constelia.ai API.
 
+[![Discord](https://img.shields.io/discord/your-discord-server-id?color=7289da&label=Discord&logo=discord&logoColor=white)](https://discord.gg/V4w2zVZJ3g)
+
 ## Prerequisites
 
 - Python 3.7 or higher
@@ -59,3 +61,19 @@ Type any Constelia.ai API command in the input field and press Enter to execute 
 - `getAchievements` - Get your achievements
 
 The application will display the JSON response in a collapsible tree format for easy navigation.
+
+## Contributing
+
+Contributions are welcome! To ensure your contributions match the current codebase, please follow these practices:
+
+- Follow the existing code style and structure
+- Add comprehensive comments for any new functionality
+- Test your changes thoroughly before submitting
+- Keep commits focused on a single feature or bug fix
+- Update the README.md if you add new features or change existing functionality
+
+## Community
+
+Join our Discord community for support, updates, and discussions:
+
+[https://discord.gg/V4w2zVZJ3g](https://discord.gg/V4w2zVZJ3g)
