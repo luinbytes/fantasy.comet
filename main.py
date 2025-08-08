@@ -385,6 +385,10 @@ class TUIApp(App):
             # Hide tree output
             tree_output = self.query_one("#tree_output", Tree)
             tree_output.display = False
+            
+            # Clear the command input
+            input_widget = self.query_one("#cmd_input", CommandInput)
+            input_widget.value = ""
             return
         # Get API key
         api_key = get_api_key()
@@ -393,6 +397,10 @@ class TUIApp(App):
             # Hide tree output
             tree_output = self.query_one("#tree_output", Tree)
             tree_output.display = False
+            
+            # Clear the command input
+            input_widget = self.query_one("#cmd_input", CommandInput)
+            input_widget.value = ""
             return
         
         # Make actual API call
@@ -414,6 +422,10 @@ class TUIApp(App):
             tree_output.display = True
             output.display = False
             tree_output.refresh()
+            
+            # Clear the command input
+            input_widget = self.query_one("#cmd_input", CommandInput)
+            input_widget.value = ""
         except Exception as e:
             # Show error in regular output and hide tree output
             output.display = True
@@ -421,6 +433,10 @@ class TUIApp(App):
             tree_output.display = False
             output.clear()
             output.write(f"[red]Error making API call: {str(e)}[/red]")
+            
+            # Clear the command input
+            input_widget = self.query_one("#cmd_input", CommandInput)
+            input_widget.value = ""
 
     async def action_autocomplete(self):
         suggestion_row = self.query_one("#suggestion_row", Static)
