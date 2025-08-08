@@ -3,18 +3,25 @@ import asyncio
 import importlib
 import json
 import requests
-from rich.pretty import pretty_repr
+from typing import Dict, Any
+
+from textual.widgets import Tree
+from textual.widgets.tree import TreeNode
 from rich.syntax import Syntax
 from textual.app import App, ComposeResult
 from textual.widgets import Input, Static, Header, Footer, Log, RichLog
 from textual.containers import Vertical
 from textual.reactive import reactive
+from rich.pretty import pretty_repr
 from textual.message import Message
 
 # Import config utilities
-import config_utils
+from config_utils import get_api_key
 
-# Dynamically import API_METHODS and CATEGORIES
+# Import API methods and categories
+from api_methods import API_METHODS, CATEGORIES
+
+import json
 
 def make_api_call(cmd, args, api_key):
     """Make an actual API call to constelia.ai using the provided command and arguments."""
@@ -263,6 +270,7 @@ class TUIApp(App):
         with Vertical():
             yield HelpPanel(id="help_panel")
             yield RichLog(id="output", highlight=True, markup=True)
+            yield Tree("Response", id="tree_output")
             yield CommandInput(placeholder="Type a command...", id="cmd_input")
             yield Static(id="suggestion_row")
             yield ForumPostsWidget(id="forum_posts")
@@ -326,10 +334,10 @@ class TUIApp(App):
         forum_posts = self.query_one("#forum_posts", ForumPostsWidget)
         if not txt.strip():
             suggestion_row.visible = False
-            forum_posts.visible = True
+            forum_posts.display = True
             self.suggestions = []
         else:
-            forum_posts.visible = True  # Keep forum posts visible
+            forum_posts.display = True  # Keep forum posts visible
             # Track last input to decide if we should reset selection
             prev_txt = getattr(self, "_last_input_text", None)
             self._last_input_text = txt
@@ -374,18 +382,38 @@ class TUIApp(App):
         cmd, args = parser.parse(txt)
         if not cmd:
             output.write("[red]Unknown command. Type 'help' for a list.[/red]")
+            # Hide tree output
+            tree_output = self.query_one("#tree_output", Tree)
+            tree_output.display = False
             return
         # Get API key
-        api_key = config_utils.get_api_key()
+        api_key = get_api_key()
         if not api_key:
             output.write("[red]Error: Could not load API key. Check your configuration.[/red]")
+            # Hide tree output
+            tree_output = self.query_one("#tree_output", Tree)
+            tree_output.display = False
             return
         
         # Make actual API call
         try:
             resp = make_api_call(cmd, args, api_key)
-            output.write(json.dumps(resp, indent=2))
+            # Get the tree output widget
+            tree_output = self.query_one("#tree_output", Tree)
+            # Clear and populate the tree
+            tree_output.clear()
+            self._build_tree(resp, tree_output.root)
+            tree_output.root.expand()
+            # Show tree output and hide regular output
+            tree_output.display = True
+            output.display = False
+            tree_output.refresh()
         except Exception as e:
+            # Show error in regular output and hide tree output
+            output.display = True
+            tree_output = self.query_one("#tree_output", Tree)
+            tree_output.display = False
+            output.clear()
             output.write(f"[red]Error making API call: {str(e)}[/red]")
 
     async def action_autocomplete(self):
@@ -408,6 +436,52 @@ class TUIApp(App):
             await self.on_input_changed(Input.Changed(input_widget, input_widget.value))
             input_widget.cursor_position = len(input_widget.value)
             suggestion_row.visible = False
+
+    def _build_tree(self, data: Any, node: TreeNode, key: str = "root"):
+        """Recursively build the tree from JSON data."""
+        if isinstance(data, dict):
+            for k, v in data.items():
+                if isinstance(v, (dict, list)) and v:
+                    # Create a branch for complex nested structures
+                    branch = node.add(k, expand=False, allow_expand=True)
+                    self._build_tree(v, branch, k)
+                else:
+                    # Display simple key-value pairs directly
+                    formatted_value = self._format_simple_value(v)
+                    node.add(f"{k}: {formatted_value}", allow_expand=False)
+        elif isinstance(data, list):
+            for i, item in enumerate(data):
+                if isinstance(item, (dict, list)) and item:
+                    # Create a branch for complex list items
+                    branch = node.add(f"[{i}]", expand=False, allow_expand=True)
+                    self._build_tree(item, branch, f"[{i}]")
+                else:
+                    # Display simple list items directly
+                    formatted_value = self._format_simple_value(item)
+                    node.add(f"[{i}] {formatted_value}", allow_expand=False)
+        else:
+            # Handle simple values
+            formatted_value = self._format_simple_value(data)
+            node.add(formatted_value, allow_expand=False)
+
+    def _format_simple_value(self, value: Any) -> str:
+        """Format simple values with appropriate coloring."""
+        if value is None:
+            return "[italic bright_black]null[/italic bright_black]"
+        elif isinstance(value, bool):
+            return f"[bold yellow]{str(value).lower()}[/bold yellow]"
+        elif isinstance(value, (int, float)):
+            return f"[bold cyan]{value}[/bold cyan]"
+        elif isinstance(value, str):
+            # Check if it looks like an error message
+            if "error" in value.lower() or "invalid" in value.lower():
+                return f"[red]{json.dumps(value)}[/red]"
+            # Check if it's a long string that should be truncated
+            if len(value) > 100:
+                return f"[green]{json.dumps(value[:100] + '...')}[/green]"
+            return f"[green]{json.dumps(value)}[/green]"
+        else:
+            return f"[white]{json.dumps(value)}[/white]"
 
     async def action_move_suggestion_down(self):
         suggestion_row = self.query_one("#suggestion_row", Static)
